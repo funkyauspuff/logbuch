@@ -1,0 +1,2066 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3D5C35">
+<meta name="description" content="Private Naturbeobachtungen, offline auf dem eigenen Gerät.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Logbuch</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,500;0,700;1,500&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* =========================================================================
+   Gestaltung: ein Feldbuch. Eine Spalte (max. 720 px), Reiter oben,
+   eine Taste unten rechts für neue Beobachtungen. Moos als Grundfarbe,
+   Bernstein (Ostsee) als Akzent. Koordinaten und Zeiten in Monospace.
+   Schriften kommen von Google Fonts; offline greifen die Ersatzschriften.
+   ========================================================================= */
+:root {
+  --papier: #EDF0EA;        /* Seitengrund */
+  --blatt: #F9FBF7;         /* Karten, Eingabefelder */
+  --tinte: #1C2520;         /* Text */
+  --blass: #5B6860;         /* Nebentext */
+  --linie: #CDD5CD;         /* Trennlinien, Rahmen */
+  --moos: #3D5C35;          /* Hauptfarbe: Knöpfe, aktive Reiter */
+  --moos-hell: #DCE6D3;     /* gewählte Tags */
+  --bernstein: #A35F0E;     /* Akzent: Punkte auf der Karte, neue Beobachtung */
+  --bernstein-hell: #F4E3C8;
+  --auf-moos: #F9FBF7;      /* Text auf Moos */
+  --auf-bernstein: #FFFFFF;
+  --warn: #9B2C1F;
+  --kartengrund: #E3E8E0;
+  --gitter: rgba(29, 38, 32, .14);
+
+  --f-titel: "Alegreya", Georgia, "Times New Roman", serif;
+  --f-text: "Alegreya Sans", "Segoe UI", Roboto, system-ui, sans-serif;
+  --f-daten: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --r: 10px;
+  --breite: 720px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --papier: #111814; --blatt: #18211C; --tinte: #E2E9E2; --blass: #93A299; --linie: #2C3931;
+    --moos: #93B884; --moos-hell: #24331F; --bernstein: #E6A24D; --bernstein-hell: #3A2913;
+    --auf-moos: #111814; --auf-bernstein: #1A1208; --warn: #F08A7A;
+    --kartengrund: #16201A; --gitter: rgba(226, 233, 226, .12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --papier: #111814; --blatt: #18211C; --tinte: #E2E9E2; --blass: #93A299; --linie: #2C3931;
+  --moos: #93B884; --moos-hell: #24331F; --bernstein: #E6A24D; --bernstein-hell: #3A2913;
+  --auf-moos: #111814; --auf-bernstein: #1A1208; --warn: #F08A7A;
+  --kartengrund: #16201A; --gitter: rgba(226, 233, 226, .12);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--papier); color: var(--tinte);
+  font-family: var(--f-text); font-size: 17px; line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+/* Band über der klebenden Kopfzeile (Notch / Statusleiste) */
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--papier); }
+
+.huelle { max-width: var(--breite); margin: 0 auto; }
+.rand { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+h1, h2, h3 { font-family: var(--f-titel); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.45rem; }
+p { margin: 0; }
+.daten { font-family: var(--f-daten); font-size: .8rem; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.blass { color: var(--blass); }
+
+/* ---------- Kopfzeile mit Reitern ---------- */
+.kopf { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--papier); border-bottom: 1px solid var(--linie); }
+.kopf-innen { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px 0; }
+.marke { display: flex; flex-direction: column; padding-bottom: 10px; }
+.marke-titel { font-family: var(--f-titel); font-style: italic; font-weight: 500; font-size: 1.9rem; line-height: 1; letter-spacing: -.01em; }
+.marke-zeile { color: var(--blass); font-size: .8rem; margin-top: 4px; }
+.reiter { display: flex; gap: 2px; }
+.reiter button {
+  font: 500 .95rem var(--f-text); color: var(--blass); background: none; border: 0;
+  padding: 10px 12px 12px; border-bottom: 3px solid transparent; cursor: pointer;
+}
+.reiter button[aria-selected="true"] { color: var(--tinte); border-bottom-color: var(--moos); }
+
+/* ---------- Knöpfe ---------- */
+.knopf {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: 500 .95rem var(--f-text); color: var(--tinte); background: var(--blatt);
+  border: 1px solid var(--linie); border-radius: 999px; padding: 9px 16px; min-height: 42px;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.knopf:hover { border-color: var(--blass); }
+.knopf-haupt { background: var(--moos); color: var(--auf-moos); border-color: var(--moos); }
+.knopf-gefahr { color: var(--warn); }
+.knopf-gefahr.scharf { background: var(--warn); color: var(--blatt); border-color: var(--warn); }
+.knopf[disabled] { opacity: .5; cursor: default; }
+.knopf-text { background: none; border: 0; color: var(--moos); font: 500 .95rem var(--f-text); padding: 8px 4px; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--bernstein); outline-offset: 2px; }
+
+/* ---------- Filter (Liste & Karte) ---------- */
+.filter { display: grid; gap: 10px; padding-block: 14px 4px; }
+.suche {
+  width: 100%; font: 400 1rem var(--f-text); color: var(--tinte); background: var(--blatt);
+  border: 1px solid var(--linie); border-radius: 999px; padding: 9px 16px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font: 500 .85rem var(--f-text); color: var(--tinte); background: transparent;
+  border: 1px solid var(--linie); border-radius: 999px; padding: 4px 11px; cursor: pointer;
+}
+.chip .anzahl { color: var(--blass); font-family: var(--f-daten); font-size: .72rem; margin-left: 4px; }
+.chip[aria-pressed="true"] { background: var(--moos-hell); border-color: var(--moos); }
+.chip-zuruecksetzen { border-style: dashed; color: var(--blass); }
+
+/* ---------- Hinweise ---------- */
+.hinweis {
+  background: var(--bernstein-hell); border-radius: var(--r); padding: 10px 14px;
+  font-size: .92rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+}
+.hinweis.warnung { border: 1px solid var(--warn); background: transparent; }
+
+/* ---------- Liste ---------- */
+main { padding-bottom: 110px; }
+.liste { display: grid; gap: 10px; padding-block: 12px; }
+.eintrag {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px;
+  background: var(--blatt); border: 1px solid var(--linie); border-radius: var(--r);
+  padding: 12px 14px; cursor: pointer; text-align: left; color: inherit; font: inherit; width: 100%;
+}
+.eintrag:hover { border-color: var(--blass); }
+.eintrag-text { min-width: 0; display: grid; gap: 4px; }
+.eintrag-kopf { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.eintrag-kopf time { font-family: var(--f-daten); font-size: .78rem; color: var(--blass); }
+.eintrag-ort { font-family: var(--f-titel); font-weight: 700; font-size: 1.05rem; }
+.eintrag-beob { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.eintrag-deut { color: var(--blass); font-style: italic; font-size: .92rem; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.eintrag-tags { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: .82rem; color: var(--moos); font-weight: 500; }
+.eintrag-meta { color: var(--blass); overflow-wrap: anywhere; }
+.vorschau { width: 76px; height: 76px; object-fit: cover; border-radius: 6px; background: var(--kartengrund); }
+.leer { border: 1px dashed var(--linie); border-radius: var(--r); padding: 28px 20px; display: grid; gap: 10px; margin-top: 12px; }
+.leer h2 { font-style: italic; font-weight: 500; }
+.leer p { color: var(--blass); max-width: 52ch; }
+
+/* ---------- Karte ---------- */
+.karte-rahmen {
+  position: relative; height: max(340px, 62vh); margin-top: 12px;
+  border: 1px solid var(--linie); border-radius: var(--r); overflow: hidden; background: var(--kartengrund);
+}
+#karte { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.karte-knoepfe { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
+.karte-knoepfe button {
+  width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--linie);
+  background: var(--blatt); color: var(--tinte); font: 500 1.2rem var(--f-text); cursor: pointer;
+}
+.karte-knoepfe button.wort { font-size: .7rem; font-weight: 700; }
+.karte-hinweis { position: absolute; left: 10px; top: 10px; right: 64px; font-size: .82rem; color: var(--blass); pointer-events: none; }
+/* Markierung beim Wählen eines Ortes: ein Stern; seine Mitte (der helle Punkt) ist der gewählte Ort */
+.stern { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; pointer-events: none; }
+.stern svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.stern .zacken { fill: var(--bernstein); stroke: var(--blatt); stroke-width: 1.5; stroke-linejoin: round; }
+.stern .mitte { fill: var(--blatt); }
+.karte-wahl {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: var(--blatt); border: 1px solid var(--linie); border-radius: var(--r); padding: 8px 10px;
+}
+.karte-wahl p { flex: 1 1 12rem; font-size: .88rem; color: var(--blass); }
+.karte-quelle { position: absolute; right: 0; bottom: 0; font-size: .7rem; background: var(--blatt); padding: 2px 6px; border-top-left-radius: 6px; color: var(--blass); }
+.karte-quelle a { color: inherit; }
+.karte-auswahl { padding-block: 12px; display: grid; gap: 8px; }
+
+/* ---------- Archiv ---------- */
+.archiv { display: grid; gap: 28px; padding-block: 20px; }
+.archiv section { display: grid; gap: 10px; }
+.archiv p { max-width: 60ch; }
+.knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.bericht { background: var(--blatt); border: 1px solid var(--linie); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 4px; }
+.zeile-schalter { display: flex; gap: 10px; align-items: flex-start; }
+.zeile-schalter input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--moos); flex: none; }
+.balken { height: 8px; background: var(--kartengrund); border-radius: 4px; overflow: hidden; }
+.balken > span { display: block; height: 100%; background: var(--moos); }
+.auszug-liste { display: grid; max-height: 45vh; overflow-y: auto; background: var(--blatt); border: 1px solid var(--linie); border-radius: var(--r); padding: 2px 12px; }
+.auszug-zeile { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--linie); color: var(--tinte); font-size: .92rem; cursor: pointer; }
+.auszug-zeile:last-child { border-bottom: 0; }
+.auszug-zeile input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--moos); flex: none; }
+.auszug-zeile > span { min-width: 0; overflow-wrap: anywhere; }
+.optionen { display: grid; gap: 8px; }
+details { background: var(--blatt); border: 1px solid var(--linie); border-radius: var(--r); }
+details summary { padding: 10px 14px; cursor: pointer; font-weight: 500; }
+details pre { margin: 0; padding: 0 14px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--f-daten); font-size: .74rem; line-height: 1.55; max-height: 60vh; overflow: auto; }
+
+/* ---------- Formularfelder ---------- */
+label { display: grid; gap: 4px; font-size: .85rem; color: var(--blass); }
+input:not([type="checkbox"]):not([type="file"]), textarea, select {
+  width: 100%; font: 400 1rem var(--f-text); color: var(--tinte); background: var(--blatt);
+  border: 1px solid var(--linie); border-radius: 8px; padding: 9px 11px; min-width: 0;
+}
+input.daten { font-family: var(--f-daten); font-size: .9rem; }
+textarea { resize: vertical; line-height: 1.5; }
+
+/* ---------- Neue Beobachtung (schwebende Taste) ---------- */
+.neu {
+  position: fixed; z-index: 6;
+  right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 700 1rem var(--f-text); color: var(--auf-bernstein); background: var(--bernstein);
+  border: 0; border-radius: 999px; padding: 14px 20px; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+.neu .plus { font-size: 1.4rem; line-height: 0; }
+
+/* ---------- Editor ---------- */
+.editor { position: fixed; inset: 0; z-index: 20; background: var(--papier); overflow-y: auto; overscroll-behavior: contain; }
+.editor-innen {
+  max-width: var(--breite); margin: 0 auto; display: grid; gap: 18px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0px)); padding-bottom: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.editor-kopf { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.editor-kopf h2 { font-style: italic; font-weight: 500; font-size: 1.6rem; }
+fieldset.gruppe { border: 0; border-top: 1px solid var(--linie); margin: 0; padding: 12px 0 0; display: grid; gap: 10px; min-width: 0; }
+legend { font-family: var(--f-titel); font-weight: 700; font-size: 1.15rem; padding: 0 8px 0 0; }
+legend .optional { font-family: var(--f-text); font-weight: 400; font-size: .8rem; color: var(--blass); margin-left: 6px; }
+.hilfe { font-size: .86rem; color: var(--blass); }
+.status { font-size: .88rem; color: var(--blass); }
+.reihe3 { display: grid; grid-template-columns: 1fr 1fr 5.5rem; gap: 8px; }
+.reihe2 { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; gap: 8px; align-items: end; }
+.reihe2b { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+@media (max-width: 420px) { .reihe3 { grid-template-columns: 1fr 1fr; } .reihe3 label:last-child { grid-column: 1 / -1; } .reihe2b { grid-template-columns: 1fr; } }
+.medien-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.medien-knoepfe .knopf input { display: none; }
+.knopf.aufnahme { background: var(--warn); color: var(--blatt); border-color: var(--warn); }
+.medien-liste { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.medium { position: relative; background: var(--blatt); border: 1px solid var(--linie); border-radius: 8px; overflow: hidden; display: grid; }
+.medium img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; max-width: 100%; }
+.medium.ton { grid-column: 1 / -1; padding: 8px; gap: 6px; }
+.medium audio { width: 100%; }
+.medium .weg { position: absolute; top: 6px; right: 6px; border: 0; border-radius: 999px; background: var(--blatt); color: var(--warn); font: 700 .78rem var(--f-text); padding: 4px 9px; cursor: pointer; }
+.medium.ton .weg { position: static; justify-self: end; }
+.editor-fuss {
+  position: sticky; bottom: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  background: var(--papier); border-top: 1px solid var(--linie);
+  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); margin-top: 6px;
+}
+.fuss-luecke { flex: 1; }
+
+/* ---------- Meldung ---------- */
+.toast {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px)); max-width: min(92vw, 520px);
+  background: var(--tinte); color: var(--papier); border-radius: 10px; padding: 10px 16px; font-size: .95rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .25);
+}
+@media (prefers-reduced-motion: no-preference) { .toast { transition: opacity .2s; } }
+</style>
+
+<header class="kopf">
+  <div class="huelle rand kopf-innen">
+    <div class="marke">
+      <span class="marke-titel">Logbuch</span>
+      <span class="marke-zeile" id="kopf-zahl">Beobachtungen, privat auf diesem Gerät</span>
+    </div>
+    <nav class="reiter" role="tablist" aria-label="Ansicht">
+      <button type="button" role="tab" id="reiter-liste" data-ansicht="liste" aria-selected="true">Einträge</button>
+      <button type="button" role="tab" id="reiter-karte" data-ansicht="karte" aria-selected="false">Karte</button>
+      <button type="button" role="tab" id="reiter-archiv" data-ansicht="archiv" aria-selected="false">Archiv</button>
+    </nav>
+  </div>
+</header>
+
+<main class="huelle rand">
+  <div id="hinweise" class="liste" hidden></div>
+
+  <div class="filter" id="filter">
+    <input type="search" id="suche" class="suche" placeholder="Suchen in Beobachtung, Deutung, Ort …" aria-label="Suchen" autocomplete="off">
+    <div class="chips" id="tag-filter" aria-label="Nach Tags filtern"></div>
+  </div>
+
+  <section id="ansicht-liste" aria-labelledby="reiter-liste">
+    <div id="liste" class="liste"></div>
+    <div id="leer" class="leer" hidden>
+      <h2>Noch keine Beobachtungen</h2>
+      <p>Tippe unten rechts auf <strong>Beobachtung</strong>. Zeit und Standort werden automatisch festgehalten; du schreibst auf, was du wahrnimmst, und hängst Fotos oder Tonaufnahmen an.</p>
+      <p>Hast du ein Archiv von einem anderen Gerät? Unter <strong>Archiv</strong> kannst du es laden.</p>
+    </div>
+    <div id="nichts-gefunden" class="leer" hidden>
+      <p>Kein Eintrag passt zu diesem Filter.</p>
+    </div>
+  </section>
+
+  <section id="ansicht-karte" aria-labelledby="reiter-karte" hidden>
+    <div class="karte-rahmen" id="karte-rahmen">
+      <canvas id="karte" aria-label="Karte der Beobachtungsorte"></canvas>
+      <p class="karte-hinweis" id="karte-hinweis"></p>
+      <div class="karte-knoepfe">
+        <button type="button" id="karte-plus" aria-label="Hineinzoomen">+</button>
+        <button type="button" id="karte-minus" aria-label="Herauszoomen">−</button>
+        <button type="button" id="karte-alle" class="wort" aria-label="Alle Punkte zeigen">ALLE</button>
+        <button type="button" id="karte-punkt" class="wort" aria-label="Ort auf der Karte wählen und eintragen">ORT</button>
+      </div>
+      <div class="stern" id="stern" hidden><svg viewBox="0 0 40 40" aria-hidden="true"><polygon class="zacken" points="20.0,1.0 24.7,13.5 38.1,14.1 27.6,22.5 31.2,35.4 20.0,28.0 8.8,35.4 12.4,22.5 1.9,14.1 15.3,13.5"/><circle class="mitte" cx="20" cy="20" r="2.5"/></svg></div>
+      <div class="karte-wahl" id="karte-wahl" hidden>
+        <p>Schieb die Karte, bis der Stern auf dem Ort liegt.</p>
+        <button type="button" class="knopf" id="karte-wahl-abbrechen">Abbrechen</button>
+        <button type="button" class="knopf knopf-haupt" id="karte-wahl-ok">Hier eintragen</button>
+      </div>
+      <div class="karte-quelle" id="karte-quelle" hidden>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende</div>
+    </div>
+    <div class="karte-auswahl" id="karte-auswahl"></div>
+  </section>
+
+  <section id="ansicht-archiv" aria-labelledby="reiter-archiv" hidden>
+    <div class="archiv">
+      <section>
+        <h2>Sichern</h2>
+        <p>Deine Einträge liegen nur auf diesem Gerät. Speichere regelmäßig ein Archiv und lege es woanders ab, zum Beispiel auf dem Rechner oder einem USB-Stick. Das Archiv landet im Download-Ordner; von dort kannst du es über die Dateien-App teilen.</p>
+        <div class="knoepfe">
+          <button type="button" class="knopf knopf-haupt" id="export">Archiv speichern (.zip)</button>
+        </div>
+        <p class="daten blass" id="export-info"></p>
+      </section>
+
+      <section>
+        <h2>Auszug weitergeben</h2>
+        <p>Ausgewählte Einträge als eigenes Archiv, ohne die Angaben, die du weglässt. Fotos werden dabei neu gespeichert, damit keine versteckten Bilddaten mitgehen. Tonaufnahmen werden aus demselben Grund in schlichte WAV-Dateien umgewandelt.</p>
+        <div class="knoepfe">
+          <button type="button" class="knopf" id="auszug-alle">Alle</button>
+          <button type="button" class="knopf" id="auszug-filter">Wie in der Liste gefiltert</button>
+          <button type="button" class="knopf" id="auszug-keine">Keine</button>
+        </div>
+        <div id="auszug-liste" class="auszug-liste"></div>
+        <div class="optionen">
+          <label class="zeile-schalter"><input type="checkbox" id="a-ort" checked>
+            <span>Ort weglassen: Koordinaten, Höhe, Ortsname und Zeitzone</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-autor" checked>
+            <span>Namen weglassen</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-wetter" checked>
+            <span>Wetter weglassen. Werte vom Wetterdienst gehören zu einem bestimmten Ort und verraten grob die Gegend.</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-fotos" checked>
+            <span>Fotos mitgeben</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-ton" checked>
+            <span>Tonaufnahmen mitgeben</span></label>
+        </div>
+        <p class="hilfe">Was in deinen Texten steht, prüft die App nicht: Orte oder Namen in Beobachtung und Deutung bleiben drin. Auch was auf einem Foto zu sehen ist, bleibt zu sehen. Ein Auszug ist zum Weitergeben gedacht, nicht als Sicherung.</p>
+        <div class="knoepfe">
+          <button type="button" class="knopf knopf-haupt" id="auszug-export" disabled>Auszug speichern</button>
+        </div>
+        <p class="daten blass" id="auszug-info"></p>
+      </section>
+
+      <section>
+        <h2>Laden und zusammenführen</h2>
+        <p>Lade ein Archiv von einem anderen Gerät oder von einer anderen Person. Neue Einträge kommen dazu. Gibt es einen Eintrag auf beiden Seiten, gewinnt die zuletzt geänderte Fassung. Nichts wird doppelt.</p>
+        <div class="knoepfe">
+          <label class="knopf">Archiv laden …<input type="file" id="import" accept=".zip,.json,application/zip,application/json" hidden></label>
+        </div>
+        <div id="import-bericht"></div>
+      </section>
+
+      <section>
+        <h2>Dieses Gerät</h2>
+        <label>Dein Name (steht als Autor an deinen Einträgen)
+          <input id="e-autor" autocomplete="name" placeholder="z. B. Mira">
+        </label>
+        <label class="zeile-schalter"><input type="checkbox" id="e-fotos">
+          <span>Fotos verkleinern (höchstens 2048 px, JPEG). Spart viel Speicher; für Bestimmung reicht es meist.</span></label>
+        <label class="zeile-schalter"><input type="checkbox" id="e-kartenbild">
+          <span>Kartenbild aus dem Internet laden (OpenStreetMap), wenn Netz da ist. Ohne Netz zeigt die Karte ein Gradnetz.</span></label>
+        <div class="bericht" id="speicher-info"><p class="blass">Speicher wird geprüft …</p></div>
+      </section>
+
+      <section>
+        <h2>Archivformat</h2>
+        <p>Das Archiv ist eine gewöhnliche ZIP-Datei mit JSON, Markdown und den Originaldateien. Es lässt sich ohne diese App lesen, von Menschen und von KI-Systemen.</p>
+        <details><summary>Formatbeschreibung anzeigen (liegt jedem Archiv als LIESMICH.md bei)</summary><pre id="format-text"></pre></details>
+      </section>
+    </div>
+  </section>
+</main>
+
+<button type="button" class="neu" id="neu"><span class="plus" aria-hidden="true">+</span> Beobachtung</button>
+
+<section id="editor" class="editor" hidden aria-labelledby="editor-titel" role="dialog" aria-modal="true">
+  <form id="editor-form" class="editor-innen" novalidate>
+    <div class="editor-kopf">
+      <h2 id="editor-titel">Neue Beobachtung</h2>
+      <button type="button" class="knopf-text" id="editor-zu">Schließen</button>
+    </div>
+
+    <fieldset class="gruppe">
+      <legend>Wann</legend>
+      <input type="datetime-local" id="f-zeit" step="60" aria-label="Zeitpunkt der Beobachtung">
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Wo</legend>
+      <p class="status" id="ort-status"></p>
+      <div class="reihe3">
+        <label>Breite (°N)<input id="f-lat" class="daten" inputmode="decimal" autocomplete="off"></label>
+        <label>Länge (°O)<input id="f-lon" class="daten" inputmode="decimal" autocomplete="off"></label>
+        <label>± Meter<input id="f-genau" class="daten" inputmode="numeric" autocomplete="off"></label>
+      </div>
+      <div class="reihe2b">
+        <label>Ortsname (optional)<input id="f-ortname" list="ortsnamen" placeholder="z. B. Hinterhof, Buchenhang am Bach" autocomplete="off"></label>
+        <button type="button" class="knopf" id="ort-messen">Neu messen</button>
+      </div>
+      <datalist id="ortsnamen"></datalist>
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Beobachtung</legend>
+      <p class="hilfe">Nur das Wahrgenommene: Farbe, Form, Größe, Anzahl, Verhalten, Geräusch, Geruch.</p>
+      <textarea id="f-beob" rows="5" aria-label="Beobachtung"></textarea>
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Fotos und Ton</legend>
+      <div class="medien-knoepfe">
+        <label class="knopf">Foto aufnehmen<input type="file" id="f-kamera" accept="image/*" capture="environment"></label>
+        <label class="knopf">Bilder wählen<input type="file" id="f-bilder" accept="image/*" multiple></label>
+        <button type="button" class="knopf" id="ton-aufnahme">Ton aufnehmen</button>
+        <label class="knopf">Tondatei wählen<input type="file" id="f-tondatei" accept="audio/*"></label>
+      </div>
+      <div id="medien-liste" class="medien-liste"></div>
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Tags</legend>
+      <input id="f-tags" placeholder="essbar, baum, vogel" autocomplete="off" aria-label="Tags, mit Komma getrennt">
+      <div id="tag-vorschlaege" class="chips"></div>
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Wetter<span class="optional">optional</span></legend>
+      <div class="reihe2">
+        <label>Beschreibung<input id="f-wetter" placeholder="bedeckt, leichter Westwind" autocomplete="off"></label>
+        <label>°C<input id="f-temp" class="daten" inputmode="decimal" autocomplete="off"></label>
+      </div>
+      <div class="reihe2b">
+        <label>Quelle<select id="f-wquelle">
+          <option value="selbst">selbst wahrgenommen</option>
+          <option value="open-meteo">Wetterdienst (Open-Meteo, Modellwert)</option>
+        </select></label>
+        <button type="button" class="knopf" id="wetter-holen">Wetter abrufen</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="gruppe">
+      <legend>Deutung<span class="optional">optional, auch später</span></legend>
+      <p class="hilfe">Bestimmung, Vermutung, Erklärung. Getrennt von der Beobachtung, damit beides ehrlich bleibt.</p>
+      <textarea id="f-deut" rows="3" aria-label="Deutung"></textarea>
+    </fieldset>
+
+    <p class="daten blass" id="editor-meta"></p>
+
+    <div class="editor-fuss">
+      <button type="button" class="knopf knopf-gefahr" id="eintrag-loeschen" hidden>Löschen</button>
+      <span class="fuss-luecke"></span>
+      <button type="button" class="knopf" id="editor-abbrechen">Abbrechen</button>
+      <button type="submit" class="knopf knopf-haupt" id="editor-speichern">Speichern</button>
+    </div>
+  </form>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="text/markdown" id="archivformat">
+# Logbuch-Archiv, Format Version 1
+
+Dieses Archiv enthält Naturbeobachtungen aus der App „Logbuch“. Es ist so gebaut,
+dass Menschen und Programme (auch KI-Systeme) es ohne die App lesen können.
+Alles darin sind offene, gewöhnliche Dateien: ZIP, JSON, Markdown, JPEG, WebM/MP4.
+
+## Inhalt der ZIP-Datei
+
+| Pfad | Inhalt |
+|---|---|
+| `LIESMICH.md` | diese Beschreibung |
+| `logbuch.json` | alle Einträge, maschinenlesbar. Diese Datei ist maßgeblich. |
+| `eintraege.md` | dieselben Einträge als lesbarer Text, chronologisch. Nur zum Lesen; beim Import wird sie ignoriert. |
+| `medien/<eintrag-id>/<medien-id>.<endung>` | Fotos und Tonaufnahmen als normale Dateien |
+
+## Grundsatz: Beobachtung und Deutung getrennt
+
+Jeder Eintrag trennt **Beobachtung** (was wahrgenommen wurde: gesehen, gehört,
+gerochen, gefühlt) von **Deutung** (Bestimmung, Vermutung, Erklärung).
+Wer das Archiv auswertet, sollte diese Trennung respektieren:
+`beobachtung` ist Rohmaterial, `deutung` ist eine vorläufige oder spätere
+Interpretation und kann falsch sein. Eine Auswertung sollte neue Deutungen
+als eigene Vorschläge kennzeichnen und die vorhandenen Texte nicht umschreiben.
+
+## logbuch.json
+
+```json
+{
+  "format": "logbuch-archiv",
+  "version": 1,
+  "exportiert": "2026-10-17T19:54:00+02:00",
+  "exportiert_von": "Mira",
+  "anzahl_eintraege": 1,
+  "eintraege": [
+    {
+      "id": "3f0c2a8e-5b1d-4c7e-9a10-2b6f1d0e7c55",
+      "erstellt": "2026-10-17T16:44:10+02:00",
+      "geaendert": "2026-10-17T16:51:02+02:00",
+      "zeitpunkt": "2026-10-17T16:44:00+02:00",
+      "zeitzone": "Europe/Berlin",
+      "autor": "Mira",
+      "bearbeitet_von": "Mira",
+      "ort": {
+        "lat": 52.516275, "lon": 13.377704,
+        "genauigkeit_m": 12, "hoehe_m": 118,
+        "quelle": "gps", "name": "Hinterhof"
+      },
+      "beobachtung": "Drei Ameisenstraßen am Fuß der Mauer, eine führt in die Ritze unter dem Fallrohr.",
+      "deutung": "Vermutlich Lasius niger.",
+      "tags": ["ameisen", "hof"],
+      "wetter": { "text": "bedeckt, windstill", "temperatur_c": 11, "quelle": "selbst" },
+      "medien": [
+        { "id": "a91e…", "typ": "foto", "mime": "image/jpeg", "bytes": 482113,
+          "datei": "medien/3f0c2a8e-…/a91e….jpg" }
+      ]
+    }
+  ]
+}
+```
+
+### Auszüge
+
+Ein Archiv kann ein **Auszug** sein: ausgewählte Einträge, bei denen beim Export
+bewusst Angaben entfernt wurden. Dann steht oben in `logbuch.json` zusätzlich:
+
+```json
+"auszug": { "weggelassen": ["ort", "autor", "wetter"], "hinweis": "…" }
+```
+
+Mögliche Werte in `weggelassen`: `ort` (dann ist `ort` überall `null` und `zeitzone` fehlt),
+`autor` (dann fehlen `autor`, `bearbeitet_von` und `exportiert_von`), `wetter` (dann ist
+`wetter` `null`), `fotos`, `ton`. Fehlende Angaben in einem Auszug bedeuten also
+„absichtlich nicht weitergegeben“, nicht „unbekannt“. Fotos in Auszügen sind neu
+kodierte JPEGs ohne Metadaten; Ton ist WAV (mono, 32 kHz, 16 bit) ohne Metadaten.
+
+### Felder eines Eintrags
+
+| Feld | Bedeutung |
+|---|---|
+| `id` | UUID. Bleibt über alle Geräte und Archive gleich. Schlüssel beim Zusammenführen. |
+| `erstellt`, `geaendert` | ISO 8601 mit Zeitzonen-Versatz. `geaendert` entscheidet beim Zusammenführen. |
+| `zeitpunkt` | Wann die Beobachtung stattfand (kann vom Anlegen abweichen). ISO 8601 mit Versatz. |
+| `zeitzone` | IANA-Name der Zeitzone des Geräts, z. B. `Europe/Berlin`. |
+| `autor` | Wer den Eintrag angelegt hat (frei gewählter Name auf dem Gerät). |
+| `bearbeitet_von` | Wer zuletzt geändert hat. |
+| `ort` | `null` oder ein Objekt: `lat`, `lon` in Dezimalgrad WGS 84 (wie GPS und OpenStreetMap); `genauigkeit_m` = vom Gerät gemeldeter Radius der Unsicherheit in Metern; `hoehe_m` = Höhe über dem Ellipsoid, falls gemeldet, sonst `null`; `quelle` = `"gps"` (vom Gerät gemessen), `"hand"` (eingetippt oder korrigiert) oder `"karte"` (nachträglich auf der Karte gewählt, z. B. ein bekannter Ort aus der Erinnerung; `genauigkeit_m` ist dann aus dem Kartenmaßstab geschätzt); `name` = freier Ortsname. |
+| `beobachtung` | Freitext. Das Wahrgenommene. |
+| `deutung` | Freitext, darf leer sein. Interpretation. |
+| `tags` | Liste von Schlagwörtern, klein geschrieben, ohne `#`, Leerzeichen als `-`. |
+| `wetter` | `null` oder `text`, `temperatur_c`, `quelle`. `quelle` ist `"selbst"` (selbst wahrgenommen) oder `"open-meteo"` (Modellwert eines Wetterdienstes für den Ort, nicht vor Ort gemessen). |
+| `medien` | Liste der angehängten Dateien: `id`, `typ` (`"foto"` oder `"ton"`), `mime`, `bytes`, `datei` (Pfad im Archiv). |
+| `geloescht` | Nur vorhanden, wenn `true`: Der Eintrag wurde gelöscht. Er bleibt als „Grabstein“ mit `id`, `erstellt`, `geaendert` erhalten, damit sich das Löschen beim Zusammenführen auf andere Geräte überträgt. Grabsteine bei der Auswertung überspringen. |
+
+Unbekannte zusätzliche Felder sollen beim Lesen ignoriert und beim Schreiben möglichst erhalten werden.
+
+## Zusammenführen (Merge)
+
+1. Einträge werden über `id` erkannt. Nichts wird doppelt angelegt.
+2. Gibt es eine `id` nur auf einer Seite, wird der Eintrag übernommen.
+3. Gibt es sie auf beiden Seiten, gewinnt die Fassung mit dem späteren `geaendert`.
+   Bei Gleichstand bleibt die vorhandene Fassung.
+4. Medien werden über ihre `id` erkannt und nur kopiert, wenn sie fehlen.
+5. Ein neuerer Grabstein (`geloescht: true`) löscht den Eintrag und seine Medien.
+
+## Hinweise für die Auswertung
+
+- Fotos werden in der App standardmäßig auf höchstens 2048 Pixel Kantenlänge
+  verkleinert und als JPEG gespeichert. Dabei gehen EXIF-Daten verloren.
+  Ort und Zeit stehen deshalb immer in `logbuch.json`, nicht im Bild.
+- Tonaufnahmen werden, soweit das Gerät es zulässt, ohne Rauschunterdrückung,
+  Echounterdrückung und automatische Lautstärke aufgenommen, damit das
+  Geräusch möglichst unverändert bleibt. Meist WebM/Opus oder MP4/AAC.
+- Die ZIP-Datei ist unkomprimiert („stored“). Jedes ZIP-Programm kann sie öffnen.
+  Die App liest beim Import auch ZIP-Dateien, die mit Kompression neu gepackt wurden,
+  und auch eine einzelne `logbuch.json` ohne Medien.
+</script>
+
+<script>
+'use strict';
+/* =========================================================================
+   Logbuch – private Naturbeobachtungen, offline, ohne Server.
+
+   Aufbau dieser Datei:
+     1. Hilfsfunktionen
+     2. Speicher (IndexedDB, mit Notlösung im Arbeitsspeicher)
+     3. Zustand und Einstellungen
+     4. Liste, Suche und Tag-Filter
+     5. Editor: Eintrag anlegen und bearbeiten (Zeit, Ort, Medien, Wetter)
+     6. Karte (eigene Canvas-Karte, optional mit OpenStreetMap-Kacheln)
+     7. ZIP schreiben und lesen (ohne Bibliothek)
+     8. Archiv: Export, Import, Zusammenführen
+     9. Gerät: Speicherplatz, Einstellungen
+    10. Start
+
+   Datenmodell: siehe Formatbeschreibung im <script id="archivformat"> oben
+   (identisch mit LIESMICH.md in jedem Archiv). Ein Eintrag in IndexedDB hat
+   genau die Felder aus logbuch.json; Medien liegen getrennt als Blobs.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   1. Hilfsfunktionen
+   --------------------------------------------------------------------------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+
+/** Element bauen: h('p', {class: 'x', text: 'Hallo'}, kind1, kind2) */
+function h(tag, attrs = {}, ...kinder) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kind of kinder.flat()) if (kind != null && kind !== false) el.append(kind);
+  return el;
+}
+
+/** UUID v4; crypto.randomUUID fehlt in manchen Umgebungen (z. B. file://). */
+function neueId() {
+  if (crypto.randomUUID) { try { return crypto.randomUUID(); } catch (_) { /* weiter unten */ } }
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  const x = [...b].map(n => n.toString(16).padStart(2, '0')).join('');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+
+const zwei = n => String(n).padStart(2, '0');
+
+/** Lokale Zeit als ISO 8601 mit Versatz, z. B. 2026-10-17T19:54:00+02:00 */
+function isoLokal(d = new Date()) {
+  const off = -d.getTimezoneOffset(), a = Math.abs(off);
+  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}T${zwei(d.getHours())}:${zwei(d.getMinutes())}:${zwei(d.getSeconds())}${off >= 0 ? '+' : '-'}${zwei(Math.floor(a / 60))}:${zwei(a % 60)}`;
+}
+/** ISO -> Wert für <input type="datetime-local"> (Gerätezeit) */
+function zuEingabeZeit(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}T${zwei(d.getHours())}:${zwei(d.getMinutes())}`;
+}
+const zeitWert = iso => { const t = Date.parse(iso); return Number.isFinite(t) ? t : 0; };
+
+const fmtDatum = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const datumText = iso => (iso ? fmtDatum.format(new Date(iso)) : '');
+
+function koordText(ort) {
+  if (!hatOrt(ort)) return '';
+  const ns = ort.lat >= 0 ? 'N' : 'S', ow = ort.lon >= 0 ? 'O' : 'W';
+  const g = ort.genauigkeit_m != null ? ` ±${ort.genauigkeit_m} m` : '';
+  return `${Math.abs(ort.lat).toFixed(5)}° ${ns} ${Math.abs(ort.lon).toFixed(5)}° ${ow}${g}`;
+}
+const hatOrt = ort => !!ort && Number.isFinite(ort.lat) && Number.isFinite(ort.lon);
+
+function groesseText(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1).replace('.', ',')} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2).replace('.', ',')} GB`;
+}
+
+/** Tags: klein, ohne '#', Leerzeichen innerhalb eines Tags werden '-'. Trennung per Komma. */
+function tagsAusText(text) {
+  return [...new Set(String(text || '').split(/[,;\n]+/)
+    .map(t => t.trim().replace(/^#+/, '').toLowerCase().replace(/\s+/g, '-'))
+    .filter(Boolean))];
+}
+
+/** Zahl aus Eingabefeld (Komma oder Punkt); leer -> null */
+function zahl(wert) {
+  const s = String(wert ?? '').trim().replace(',', '.');
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+const MIME_ENDUNG = {
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif',
+  'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/flac': 'flac',
+  'video/webm': 'webm', 'video/mp4': 'mp4',
+};
+const ENDUNG_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif',
+  webm: 'audio/webm', ogg: 'audio/ogg', opus: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', mp4: 'video/mp4' };
+const basisMime = m => String(m || '').split(';')[0].trim().toLowerCase();
+const endungFuer = mime => MIME_ENDUNG[basisMime(mime)] || 'bin';
+
+let toastTimer = null;
+function meldung(text, ms = 3800) {
+  const t = $('#toast');
+  t.textContent = text; t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+/** Läuft die Seite als Vorschau innerhalb von claude.ai? (Dort sind Standort, Mikrofon, Kartenbild gesperrt.) */
+const inClaude = () => !!(window.claude && typeof window.claude.use === 'function');
+
+/* ---------------------------------------------------------------------------
+   2. Speicher (IndexedDB)
+   Drei Speicher: 'eintraege' (Schlüssel id), 'medien' (Schlüssel id, Index
+   eintragId; Felder: id, eintragId, typ, mime, name, blob, vorschau) und
+   'einstellungen' (Schlüssel = Name).
+   Wenn IndexedDB nicht verfügbar ist, läuft alles im Arbeitsspeicher und
+   die App warnt, dass nichts dauerhaft gespeichert wird.
+   --------------------------------------------------------------------------- */
+const DB_NAME = 'logbuch';
+const DB_VERSION = 1;
+
+function idbOeffnen() {
+  return new Promise((ok, fehler) => {
+    let req;
+    try { req = indexedDB.open(DB_NAME, DB_VERSION); } catch (e) { fehler(e); return; }
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains('eintraege')) d.createObjectStore('eintraege', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('medien')) d.createObjectStore('medien', { keyPath: 'id' }).createIndex('eintragId', 'eintragId');
+      if (!d.objectStoreNames.contains('einstellungen')) d.createObjectStore('einstellungen');
+    };
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => fehler(req.error);
+    req.onblocked = () => fehler(new Error('IndexedDB blockiert'));
+  });
+}
+
+function idbSpeicher(idb) {
+  /** Führt fn(store) in einer Transaktion aus und liefert das Ergebnis der letzten Anfrage. */
+  const tx = (name, modus, fn) => new Promise((ok, fehler) => {
+    const t = idb.transaction(name, modus);
+    let ergebnis;
+    const req = fn(t.objectStore(name));
+    if (req) req.onsuccess = () => { ergebnis = req.result; };
+    t.oncomplete = () => ok(ergebnis);
+    t.onerror = () => fehler(t.error);
+    t.onabort = () => fehler(t.error || new Error('Transaktion abgebrochen'));
+  });
+  return {
+    dauerhaft: true,
+    alle: name => tx(name, 'readonly', s => s.getAll()),
+    holen: (name, key) => tx(name, 'readonly', s => s.get(key)),
+    setzen: (name, wert, key) => tx(name, 'readwrite', s => (key === undefined ? s.put(wert) : s.put(wert, key))),
+    loeschen: (name, key) => tx(name, 'readwrite', s => s.delete(key)),
+    medienVon: eintragId => tx('medien', 'readonly', s => s.index('eintragId').getAll(eintragId)),
+  };
+}
+
+function speicherImArbeitsspeicher() {
+  const m = { eintraege: new Map(), medien: new Map(), einstellungen: new Map() };
+  const keyVon = (name, wert, key) => (key !== undefined ? key : wert.id);
+  return {
+    dauerhaft: false,
+    alle: async name => [...m[name].values()],
+    holen: async (name, key) => m[name].get(key),
+    setzen: async (name, wert, key) => { m[name].set(keyVon(name, wert, key), wert); },
+    loeschen: async (name, key) => { m[name].delete(key); },
+    medienVon: async id => [...m.medien.values()].filter(x => x.eintragId === id),
+  };
+}
+
+let db = null; // wird in start() gesetzt
+
+/* ---------------------------------------------------------------------------
+   3. Zustand und Einstellungen
+   --------------------------------------------------------------------------- */
+const STANDARD_EINSTELLUNGEN = { autor: '', fotoVerkleinern: true, kartenbild: true, letzterExport: null };
+
+const zustand = {
+  eintraege: new Map(),            // id -> Eintrag (inkl. Grabsteine)
+  einstellungen: { ...STANDARD_EINSTELLUNGEN },
+  filter: { tags: new Set(), text: '' },
+  ansicht: 'liste',
+};
+
+async function einstellungenLaden() {
+  for (const k of Object.keys(STANDARD_EINSTELLUNGEN)) {
+    try { const v = await db.holen('einstellungen', k); if (v !== undefined) zustand.einstellungen[k] = v; } catch (_) { /* Standard bleibt */ }
+  }
+}
+async function einstellungSetzen(k, v) {
+  zustand.einstellungen[k] = v;
+  try { await db.setzen('einstellungen', v, k); } catch (_) { /* nur im Arbeitsspeicher */ }
+}
+
+const sichtbare = () => [...zustand.eintraege.values()].filter(e => !e.geloescht);
+
+/* ---------------------------------------------------------------------------
+   4. Liste, Suche und Tag-Filter
+   --------------------------------------------------------------------------- */
+function gefilterteEintraege() {
+  const q = zustand.filter.text.trim().toLowerCase();
+  const tags = [...zustand.filter.tags];
+  return sichtbare()
+    .filter(e => tags.every(t => (e.tags || []).includes(t)))
+    .filter(e => !q || [e.beobachtung, e.deutung, e.ort?.name, (e.tags || []).join(' '), e.wetter?.text, e.autor]
+      .join(' ').toLowerCase().includes(q))
+    .sort((a, b) => zeitWert(b.zeitpunkt) - zeitWert(a.zeitpunkt));
+}
+
+/** Alle Tags mit Häufigkeit, häufigste zuerst */
+function tagZaehlung() {
+  const z = new Map();
+  for (const e of sichtbare()) for (const t of e.tags || []) z.set(t, (z.get(t) || 0) + 1);
+  return [...z.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'de'));
+}
+
+function tagFilterZeichnen() {
+  const box = $('#tag-filter');
+  box.replaceChildren();
+  const alle = tagZaehlung();
+  // Gewählte Tags, die es nicht mehr gibt, entfernen
+  for (const t of [...zustand.filter.tags]) if (!alle.some(([n]) => n === t)) zustand.filter.tags.delete(t);
+  for (const [tag, anzahl] of alle) {
+    box.append(h('button', {
+      type: 'button', class: 'chip', 'aria-pressed': String(zustand.filter.tags.has(tag)),
+      onclick: () => {
+        zustand.filter.tags.has(tag) ? zustand.filter.tags.delete(tag) : zustand.filter.tags.add(tag);
+        allesZeichnen();
+      },
+    }, '#' + tag, h('span', { class: 'anzahl', text: String(anzahl) })));
+  }
+  if (zustand.filter.tags.size) {
+    box.append(h('button', { type: 'button', class: 'chip chip-zuruecksetzen', text: 'Filter aufheben',
+      onclick: () => { zustand.filter.tags.clear(); allesZeichnen(); } }));
+  }
+}
+
+/* Vorschaubilder: Object-URLs werden pro Medien-id einmal erzeugt und wiederverwendet. */
+const vorschauUrls = new Map();
+function urlFuer(medium, feld = 'vorschau') {
+  const key = medium.id + ':' + feld;
+  if (!vorschauUrls.has(key)) {
+    const blob = medium[feld] || medium.blob;
+    if (!blob) return null;
+    vorschauUrls.set(key, URL.createObjectURL(blob));
+  }
+  return vorschauUrls.get(key);
+}
+function urlsFreigeben(mediumId) {
+  for (const k of [...vorschauUrls.keys()]) if (k.startsWith(mediumId + ':')) { URL.revokeObjectURL(vorschauUrls.get(k)); vorschauUrls.delete(k); }
+}
+
+/** Eine Karteikarte für einen Eintrag (Liste und Kartenauswahl) */
+function eintragKarte(e) {
+  const fotos = (e.medien || []).filter(m => m.typ === 'foto').length;
+  const toene = (e.medien || []).filter(m => m.typ === 'ton').length;
+  const meta = [koordText(e.ort), fotos ? `${fotos} Foto${fotos > 1 ? 's' : ''}` : '', toene ? `${toene} Ton` : '', e.autor].filter(Boolean).join(' · ');
+  const bild = h('img', { class: 'vorschau', alt: '', loading: 'lazy', hidden: true });
+  const karte = h('button', { type: 'button', class: 'eintrag', onclick: () => editorOeffnen(e.id) },
+    h('div', { class: 'eintrag-text' },
+      h('div', { class: 'eintrag-kopf' },
+        e.ort?.name ? h('span', { class: 'eintrag-ort', text: e.ort.name }) : null,
+        h('time', { datetime: e.zeitpunkt, text: datumText(e.zeitpunkt) })),
+      e.beobachtung ? h('p', { class: 'eintrag-beob', text: e.beobachtung }) : null,
+      e.deutung ? h('p', { class: 'eintrag-deut', text: 'Deutung: ' + e.deutung }) : null,
+      (e.tags || []).length ? h('div', { class: 'eintrag-tags' }, e.tags.map(t => h('span', { text: '#' + t }))) : null,
+      meta ? h('p', { class: 'eintrag-meta daten', text: meta }) : null),
+    bild);
+  // Erstes Foto als Vorschau nachladen
+  const erstesFoto = (e.medien || []).find(m => m.typ === 'foto');
+  if (erstesFoto) {
+    db.holen('medien', erstesFoto.id).then(m => {
+      const url = m && urlFuer(m);
+      if (url) { bild.src = url; bild.hidden = false; }
+    }).catch(() => {});
+  }
+  return karte;
+}
+
+function listeZeichnen() {
+  const liste = $('#liste');
+  const alle = sichtbare();
+  const treffer = gefilterteEintraege();
+  liste.replaceChildren(...treffer.map(eintragKarte));
+  $('#leer').hidden = alle.length > 0;
+  $('#nichts-gefunden').hidden = !(alle.length > 0 && treffer.length === 0);
+  const n = alle.length;
+  $('#kopf-zahl').textContent = n === 0 ? 'Beobachtungen, privat auf diesem Gerät'
+    : (treffer.length === n ? `${n} Beobachtung${n === 1 ? '' : 'en'}` : `${treffer.length} von ${n} Beobachtungen`);
+}
+
+/** Hinweise oben: flüchtiger Speicher, Vorschau in Claude, lange keine Sicherung */
+function hinweiseZeichnen() {
+  const box = $('#hinweise');
+  const teile = [];
+  if (!db.dauerhaft) teile.push(h('div', { class: 'hinweis warnung' }, h('span', { text: 'Dieser Browser erlaubt hier keinen dauerhaften Speicher. Einträge gehen beim Schließen verloren. Speichere vorher ein Archiv.' })));
+  if (inClaude()) teile.push(h('div', { class: 'hinweis' }, h('span', { text: 'Das ist die Vorschau in Claude. Standort, Mikrofon und Kartenbild sind hier gesperrt; trag den Ort selbst ein oder nutze die installierte Fassung.' })));
+  const letzter = zustand.einstellungen.letzterExport;
+  const tage = letzter ? (Date.now() - zeitWert(letzter)) / 864e5 : Infinity;
+  if (sichtbare().length >= 3 && tage > 14) {
+    teile.push(h('div', { class: 'hinweis' },
+      h('span', { text: letzter ? `Letzte Sicherung vor ${Math.floor(tage)} Tagen.` : 'Noch keine Sicherung gespeichert.' }),
+      h('button', { type: 'button', class: 'knopf', text: 'Jetzt sichern', onclick: () => ansichtWechseln('archiv') })));
+  }
+  box.replaceChildren(...teile);
+  box.hidden = teile.length === 0;
+}
+
+function allesZeichnen() {
+  tagFilterZeichnen();
+  listeZeichnen();
+  hinweiseZeichnen();
+  if (zustand.ansicht === 'karte') { karteAuswahlZeichnen(); karteNeuZeichnen(); }
+}
+
+function ansichtWechseln(ansicht) {
+  zustand.ansicht = ansicht;
+  for (const b of document.querySelectorAll('.reiter button')) b.setAttribute('aria-selected', String(b.dataset.ansicht === ansicht));
+  $('#ansicht-liste').hidden = ansicht !== 'liste';
+  $('#ansicht-karte').hidden = ansicht !== 'karte';
+  $('#ansicht-archiv').hidden = ansicht !== 'archiv';
+  $('#filter').hidden = ansicht === 'archiv';
+  if (ansicht === 'karte') karteAnzeigen();
+  if (ansicht === 'archiv') archivAnsichtZeichnen();
+  try { localStorage.setItem('logbuch.ansicht', ansicht); } catch (_) { /* egal */ }
+  window.scrollTo(0, 0);
+}
+
+/* ---------------------------------------------------------------------------
+   5. Editor
+   Der Entwurf hält alles, was noch nicht gespeichert ist. Erst „Speichern“
+   schreibt Eintrag und neue Medien in den Speicher.
+   --------------------------------------------------------------------------- */
+let entwurf = null; // { id, neu, eintrag, medien: [{id, typ, mime, name, blob, vorschau}], entfernt: Set, ortQuelle, hoehe }
+
+/**
+ * Editor öffnen. id = vorhandener Eintrag, sonst neuer Eintrag.
+ * vorgabeOrt = {lat, lon, genauigkeit_m}: Ort wurde auf der Karte gewählt;
+ * dann wird nicht gemessen, und der Ort bekommt die Quelle "karte".
+ */
+async function editorOeffnen(id = null, vorgabeOrt = null) {
+  const vorhanden = id ? zustand.eintraege.get(id) : null;
+  entwurf = {
+    id: vorhanden ? vorhanden.id : neueId(),
+    neu: !vorhanden,
+    eintrag: vorhanden,
+    medien: [],
+    entfernt: new Set(),
+    ortQuelle: vorhanden?.ort?.quelle || 'gps',
+    hoehe: vorhanden?.ort?.hoehe_m ?? null,
+  };
+  if (vorhanden) {
+    const gespeichert = await db.medienVon(vorhanden.id).catch(() => []);
+    const reihenfolge = (vorhanden.medien || []).map(m => m.id);
+    entwurf.medien = gespeichert.sort((a, b) => reihenfolge.indexOf(a.id) - reihenfolge.indexOf(b.id));
+  }
+  const e = vorhanden || {};
+  $('#editor-titel').textContent = vorhanden ? 'Beobachtung' : 'Neue Beobachtung';
+  $('#f-zeit').value = zuEingabeZeit(e.zeitpunkt || isoLokal());
+  $('#f-lat').value = hatOrt(e.ort) ? e.ort.lat.toFixed(6) : '';
+  $('#f-lon').value = hatOrt(e.ort) ? e.ort.lon.toFixed(6) : '';
+  $('#f-genau').value = e.ort?.genauigkeit_m ?? '';
+  $('#f-ortname').value = e.ort?.name || '';
+  $('#f-beob').value = e.beobachtung || '';
+  $('#f-deut').value = e.deutung || '';
+  $('#f-tags').value = (e.tags || []).join(', ');
+  $('#f-wetter').value = e.wetter?.text || '';
+  $('#f-temp').value = e.wetter?.temperatur_c ?? '';
+  $('#f-wquelle').value = e.wetter?.quelle === 'open-meteo' ? 'open-meteo' : 'selbst';
+  $('#eintrag-loeschen').hidden = !vorhanden;
+  loeschKnopfEntschaerfen();
+  $('#editor-meta').textContent = vorhanden
+    ? [`angelegt ${datumText(e.erstellt)}${e.autor ? ' von ' + e.autor : ''}`,
+       e.geaendert !== e.erstellt ? `geändert ${datumText(e.geaendert)}${e.bearbeitet_von ? ' von ' + e.bearbeitet_von : ''}` : '',
+       `id ${e.id}`].filter(Boolean).join(' · ')
+    : '';
+  $('#ort-status').textContent = vorhanden
+    ? (hatOrt(e.ort) ? ({ hand: 'Ort von Hand eingetragen.', karte: 'Ort auf der Karte gewählt.' }[e.ort.quelle] || 'Ort gemessen.') : 'Kein Ort gespeichert.')
+    : '';
+  ortsnamenVorschlagen();
+  tagVorschlaegeZeichnen();
+  medienListeZeichnen();
+  $('#editor').hidden = false;
+  document.body.style.overflow = 'hidden';
+  $('#editor').scrollTop = 0;
+  if (!vorhanden && vorgabeOrt) {
+    $('#f-lat').value = vorgabeOrt.lat.toFixed(6);
+    $('#f-lon').value = vorgabeOrt.lon.toFixed(6);
+    $('#f-genau').value = vorgabeOrt.genauigkeit_m;
+    entwurf.ortQuelle = 'karte';
+    entwurf.hoehe = null;
+    $('#ort-status').textContent = 'Ort auf der Karte gewählt.';
+  } else if (!vorhanden) ortMessen();
+}
+
+function editorSchliessen() {
+  ortStopp();
+  if (rekorder) { rekorder.verwerfen = true; rekorder.stop(); }
+  for (const m of entwurf?.medien || []) if (m.neu) urlsFreigeben(m.id);
+  entwurf = null;
+  $('#editor').hidden = true;
+  document.body.style.overflow = '';
+}
+
+/* ---- Ort ---- */
+let ortWache = null, ortUhr = null;
+
+/**
+ * Misst den Standort und verbessert ihn bis zu 45 s lang (im Wald dauert GPS oft).
+ * Zwei Wege parallel:
+ *  1. ein schneller, ungenauer Wert (WLAN/Mobilfunk, darf bis 10 min alt sein),
+ *     damit Geräte ohne GPS-Chip (viele Tablets) überhaupt etwas bekommen;
+ *  2. eine laufende GPS-Messung, die jeden genaueren Wert übernimmt.
+ */
+function ortMessen() {
+  ortStopp();
+  const status = $('#ort-status');
+  if (!('geolocation' in navigator)) { status.textContent = 'Dieses Gerät meldet keinen Standort. Trag Breite und Länge selbst ein.'; return; }
+  status.textContent = 'Standort wird gemessen …';
+  let beste = null, verweigert = false;
+  const zeigen = (c, fertig) => {
+    status.textContent = `Gemessen: ±${Math.round(c.accuracy)} m` + (fertig || c.accuracy <= 10 ? '' : '. Wird genauer, solange du wartest.');
+  };
+  const uebernehmen = pos => {
+    if (!entwurf || ortWache === null && ortUhr === null) return;
+    const c = pos.coords;
+    if (beste && c.accuracy >= beste.accuracy) return;
+    beste = c;
+    $('#f-lat').value = c.latitude.toFixed(6);
+    $('#f-lon').value = c.longitude.toFixed(6);
+    $('#f-genau').value = Math.round(c.accuracy);
+    entwurf.ortQuelle = 'gps';
+    entwurf.hoehe = c.altitude != null ? Math.round(c.altitude) : null;
+    zeigen(c, false);
+    if (c.accuracy <= 8) { ortStopp(); zeigen(c, true); }
+  };
+  const fehler = err => {
+    if (err && err.code === 1) {
+      verweigert = true;
+      ortStopp();
+      status.textContent = 'Standort nicht erlaubt. Erlaube ihn für diese Seite und für den Browser selbst (Android-Einstellungen → Apps → Browser → Berechtigungen), oder trag ihn selbst ein.';
+    }
+    // Zeitüberschreitung oder „nicht verfügbar“: weiter warten, die Uhr unten entscheidet
+  };
+  ortUhr = setTimeout(() => {
+    ortStopp();
+    if (beste) { zeigen(beste, true); return; }
+    if (verweigert) return;
+    status.textContent = 'Kein Standort gefunden. Geräte ohne GPS (viele Tablets) brauchen dafür WLAN und eingeschaltete Google-Standortgenauigkeit. Trag ihn sonst selbst ein oder tippe auf „Neu messen“.';
+  }, 45000);
+  try {
+    navigator.geolocation.getCurrentPosition(uebernehmen, fehler, { enableHighAccuracy: false, maximumAge: 600000, timeout: 20000 });
+    ortWache = navigator.geolocation.watchPosition(uebernehmen, fehler, { enableHighAccuracy: true, maximumAge: 0, timeout: 45000 });
+  } catch (_) {
+    ortStopp();
+    status.textContent = 'Standort nicht verfügbar. Du kannst ihn selbst eintragen.';
+  }
+}
+function ortStopp() {
+  if (ortWache != null) { try { navigator.geolocation.clearWatch(ortWache); } catch (_) { /* egal */ } }
+  ortWache = null;
+  clearTimeout(ortUhr);
+  ortUhr = null;
+}
+
+function ortsnamenVorschlagen() {
+  const namen = [...new Set(sichtbare().map(e => e.ort?.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+  $('#ortsnamen').replaceChildren(...namen.map(n => h('option', { value: n })));
+}
+
+/* ---- Tags im Editor ---- */
+function tagVorschlaegeZeichnen() {
+  const aktuell = new Set(tagsAusText($('#f-tags').value));
+  const box = $('#tag-vorschlaege');
+  box.replaceChildren(...tagZaehlung().slice(0, 24).map(([tag]) => h('button', {
+    type: 'button', class: 'chip', 'aria-pressed': String(aktuell.has(tag)),
+    onclick: () => {
+      const s = new Set(tagsAusText($('#f-tags').value));
+      s.has(tag) ? s.delete(tag) : s.add(tag);
+      $('#f-tags').value = [...s].join(', ');
+      tagVorschlaegeZeichnen();
+    },
+  }, '#' + tag)));
+}
+
+/* ---- Medien ---- */
+
+/** Bild verkleinern und als JPEG neu kodieren. Liefert die Datei unverändert, wenn das nicht geht (z. B. HEIC). */
+async function bildSkalieren(datei, max, qualitaet) {
+  const bmp = await createImageBitmap(datei, { imageOrientation: 'from-image' });
+  const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bmp.width * s));
+  c.height = Math.max(1, Math.round(bmp.height * s));
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  if (bmp.close) bmp.close();
+  return new Promise((ok, fehler) => c.toBlob(b => (b ? ok(b) : fehler(new Error('Bild ließ sich nicht kodieren'))), 'image/jpeg', qualitaet));
+}
+
+/** Foto aufbereiten: optional verkleinern, immer ein kleines Vorschaubild für die Liste erzeugen */
+async function fotoAufbereiten(datei) {
+  let blob = datei;
+  if (zustand.einstellungen.fotoVerkleinern) { try { blob = await bildSkalieren(datei, 2048, 0.85); } catch (_) { /* Original behalten */ } }
+  let vorschau = null;
+  try { vorschau = await bildSkalieren(datei, 360, 0.72); } catch (_) { /* ohne Vorschau */ }
+  return { blob, vorschau };
+}
+
+async function fotosHinzufuegen(dateien) {
+  for (const datei of dateien) {
+    if (!datei.type.startsWith('image/') && !/\.(heic|heif)$/i.test(datei.name)) continue;
+    const { blob, vorschau } = await fotoAufbereiten(datei);
+    entwurf?.medien.push({ id: neueId(), eintragId: entwurf.id, typ: 'foto', mime: basisMime(blob.type) || ENDUNG_MIME[datei.name.split('.').pop().toLowerCase()] || 'image/jpeg', name: datei.name || '', blob, vorschau, neu: true });
+  }
+  medienListeZeichnen();
+}
+
+function tonHinzufuegen(blob, name = '') {
+  if (!entwurf) return;
+  const mime = basisMime(blob.type) || ENDUNG_MIME[String(name).split('.').pop().toLowerCase()] || 'audio/webm';
+  entwurf.medien.push({ id: neueId(), eintragId: entwurf.id, typ: 'ton', mime, name, blob, vorschau: null, neu: true });
+  medienListeZeichnen();
+}
+
+function medienListeZeichnen() {
+  const box = $('#medien-liste');
+  if (!entwurf) return;
+  box.replaceChildren(...entwurf.medien.map((m, i) => {
+    const weg = h('button', { type: 'button', class: 'weg', text: 'Entfernen', onclick: () => {
+      entwurf.medien.splice(i, 1);
+      if (!m.neu) entwurf.entfernt.add(m.id); else urlsFreigeben(m.id);
+      medienListeZeichnen();
+    } });
+    if (m.typ === 'foto') {
+      return h('div', { class: 'medium' },
+        h('a', { href: urlFuer(m, 'blob'), target: '_blank', rel: 'noopener' }, h('img', { src: urlFuer(m), alt: 'Foto' })),
+        weg);
+    }
+    return h('div', { class: 'medium ton' },
+      h('span', { class: 'daten blass', text: `Ton · ${endungFuer(m.mime)} · ${groesseText(m.blob.size)}` }),
+      h('audio', { controls: true, preload: 'metadata', src: urlFuer(m, 'blob') }),
+      weg);
+  }));
+}
+
+/* ---- Tonaufnahme ---- */
+let rekorder = null, rekorderUhr = null;
+
+async function tonAufnahmeUmschalten() {
+  const knopf = $('#ton-aufnahme');
+  if (rekorder) { rekorder.stop(); return; }
+  let stream;
+  try {
+    // Naturgeräusche möglichst unverändert: keine Rausch- oder Echounterdrückung, keine Lautstärkeautomatik
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (_) {
+    meldung('Das Mikrofon ist hier nicht verfügbar. Nimm mit der Sprachmemo-App auf und wähle die Datei über „Tondatei wählen“.', 6000);
+    return;
+  }
+  const typ = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  try {
+    rekorder = new MediaRecorder(stream, typ ? { mimeType: typ, audioBitsPerSecond: 128000 } : undefined);
+  } catch (_) {
+    stream.getTracks().forEach(t => t.stop());
+    meldung('Aufnehmen wird von diesem Browser nicht unterstützt. Wähle stattdessen eine Tondatei.');
+    return;
+  }
+  const teile = [];
+  const beginn = Date.now();
+  rekorder.ondataavailable = ev => { if (ev.data.size) teile.push(ev.data); };
+  rekorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(rekorderUhr);
+    const verwerfen = rekorder.verwerfen;
+    const mime = basisMime(rekorder.mimeType || typ || 'audio/webm');
+    rekorder = null;
+    knopf.textContent = 'Ton aufnehmen';
+    knopf.classList.remove('aufnahme');
+    if (!verwerfen && teile.length) tonHinzufuegen(new Blob(teile, { type: mime }), '');
+  };
+  rekorder.start(1000);
+  knopf.classList.add('aufnahme');
+  const tick = () => { const s = Math.floor((Date.now() - beginn) / 1000); knopf.textContent = `Stopp ${Math.floor(s / 60)}:${zwei(s % 60)}`; };
+  tick();
+  rekorderUhr = setInterval(tick, 500);
+}
+
+/* ---- Wetter (optional, braucht Netz) ---- */
+const WMO = { 0: 'klar', 1: 'überwiegend klar', 2: 'teils bewölkt', 3: 'bedeckt', 45: 'Nebel', 48: 'Nebel mit Reif',
+  51: 'leichter Nieselregen', 53: 'Nieselregen', 55: 'starker Nieselregen', 56: 'gefrierender Nieselregen', 57: 'starker gefrierender Nieselregen',
+  61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen', 66: 'gefrierender Regen', 67: 'starker gefrierender Regen',
+  71: 'leichter Schneefall', 73: 'Schneefall', 75: 'starker Schneefall', 77: 'Schneegriesel',
+  80: 'leichte Regenschauer', 81: 'Regenschauer', 82: 'heftige Regenschauer', 85: 'Schneeschauer', 86: 'starke Schneeschauer',
+  95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'Gewitter mit starkem Hagel' };
+
+async function wetterAbrufen() {
+  const lat = zahl($('#f-lat').value), lon = zahl($('#f-lon').value);
+  if (lat == null || lon == null) { meldung('Erst einen Ort messen oder eintragen.'); return; }
+  const knopf = $('#wetter-holen');
+  knopf.disabled = true; knopf.textContent = 'Wird abgerufen …';
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m,weather_code&timezone=auto`;
+    const antwort = await fetch(url);
+    if (!antwort.ok) throw new Error(String(antwort.status));
+    const c = (await antwort.json()).current;
+    $('#f-wetter').value = [WMO[c.weather_code] || `Wettercode ${c.weather_code}`, `Bewölkung ${c.cloud_cover} %`,
+      `Wind ${Math.round(c.wind_speed_10m)} km/h`, `Luftfeuchte ${c.relative_humidity_2m} %`, `Niederschlag ${c.precipitation} mm`].join(', ');
+    $('#f-temp').value = String(c.temperature_2m).replace('.', ',');
+    $('#f-wquelle').value = 'open-meteo';
+  } catch (_) {
+    meldung('Wetter ließ sich nicht abrufen, vermutlich kein Netz. Trag es einfach selbst ein.');
+  } finally {
+    knopf.disabled = false; knopf.textContent = 'Wetter abrufen';
+  }
+}
+
+/* ---- Speichern und Löschen ---- */
+async function eintragSpeichern() {
+  if (!entwurf) return;
+  ortStopp();
+  if (rekorder) { meldung('Beende zuerst die Tonaufnahme.'); return; }
+  const beobachtung = $('#f-beob').value.trim();
+  if (!beobachtung && entwurf.medien.length === 0) {
+    meldung('Schreib eine Beobachtung oder füge ein Foto oder eine Tonaufnahme hinzu.');
+    $('#f-beob').focus();
+    return;
+  }
+  const lat = zahl($('#f-lat').value), lon = zahl($('#f-lon').value);
+  if ((lat != null) !== (lon != null) || (lat != null && (Math.abs(lat) > 90 || Math.abs(lon) > 180))) {
+    meldung('Breite und Länge bitte beide als Dezimalgrad eintragen, z. B. 52,5163 und 13,3777.');
+    return;
+  }
+  const alt = entwurf.eintrag;
+  const jetzt = isoLokal();
+  const zeitEingabe = $('#f-zeit').value;
+  const wetterText = $('#f-wetter').value.trim();
+  const temp = zahl($('#f-temp').value);
+  const name = zustand.einstellungen.autor || '';
+  const eintrag = {
+    ...(alt || {}), // unbekannte Felder aus neueren Versionen erhalten
+    id: entwurf.id,
+    erstellt: alt?.erstellt || jetzt,
+    geaendert: jetzt,
+    zeitpunkt: zeitEingabe ? isoLokal(new Date(zeitEingabe)) : jetzt,
+    zeitzone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+    autor: alt ? alt.autor : name,
+    bearbeitet_von: name,
+    ort: lat != null ? {
+      lat, lon,
+      genauigkeit_m: zahl($('#f-genau').value) != null ? Math.round(zahl($('#f-genau').value)) : null,
+      hoehe_m: entwurf.hoehe,
+      quelle: entwurf.ortQuelle,
+      name: $('#f-ortname').value.trim(),
+    } : null,
+    beobachtung,
+    deutung: $('#f-deut').value.trim(),
+    tags: tagsAusText($('#f-tags').value),
+    wetter: (wetterText || temp != null) ? { text: wetterText, temperatur_c: temp, quelle: $('#f-wquelle').value } : null,
+    medien: entwurf.medien.map(m => ({ id: m.id, typ: m.typ, mime: m.mime, bytes: m.blob.size })),
+  };
+  delete eintrag.geloescht;
+  try {
+    for (const m of entwurf.medien) if (m.neu) {
+      const { neu, ...gespeichert } = m;
+      await db.setzen('medien', gespeichert);
+      m.neu = false;
+    }
+    for (const id of entwurf.entfernt) { await db.loeschen('medien', id); urlsFreigeben(id); }
+    await db.setzen('eintraege', eintrag);
+  } catch (err) {
+    meldung(err && err.name === 'QuotaExceededError'
+      ? 'Der Speicher ist voll. Sichere ein Archiv und verkleinere Fotos in den Einstellungen.'
+      : 'Speichern ist fehlgeschlagen: ' + (err?.message || err), 7000);
+    return;
+  }
+  zustand.eintraege.set(eintrag.id, eintrag);
+  editorSchliessen();
+  allesZeichnen();
+  meldung('Gespeichert.');
+}
+
+let loeschScharf = null;
+function loeschKnopfEntschaerfen() {
+  clearTimeout(loeschScharf); loeschScharf = null;
+  const k = $('#eintrag-loeschen');
+  k.textContent = 'Löschen'; k.classList.remove('scharf');
+}
+async function eintragLoeschen() {
+  const k = $('#eintrag-loeschen');
+  if (!loeschScharf) {
+    // Zweistufig: erst scharf schalten, dann bestätigen (confirm() gibt es nicht überall)
+    k.textContent = 'Wirklich löschen?'; k.classList.add('scharf');
+    loeschScharf = setTimeout(loeschKnopfEntschaerfen, 4000);
+    return;
+  }
+  loeschKnopfEntschaerfen();
+  const e = entwurf.eintrag;
+  await grabsteinSetzen(e, isoLokal());
+  editorSchliessen();
+  allesZeichnen();
+  meldung('Eintrag gelöscht.');
+}
+
+/** Ersetzt einen Eintrag durch einen Grabstein und löscht seine Medien. */
+async function grabsteinSetzen(e, geaendert) {
+  const medien = await db.medienVon(e.id).catch(() => []);
+  for (const m of medien) { await db.loeschen('medien', m.id); urlsFreigeben(m.id); }
+  const stein = { id: e.id, erstellt: e.erstellt, geaendert, geloescht: true };
+  await db.setzen('eintraege', stein);
+  zustand.eintraege.set(e.id, stein);
+}
+
+/* ---------------------------------------------------------------------------
+   6. Karte
+   Eigene, kleine Karte auf einem <canvas> in Web-Mercator-Projektion
+   (wie OpenStreetMap). Ohne Netz: Gradnetz mit Beschriftung und Maßstab.
+   Mit Netz (und Einstellung an): OSM-Kacheln darunter. Keine Bibliothek,
+   damit die App offline vollständig funktioniert.
+   --------------------------------------------------------------------------- */
+const KACHEL = 256;
+const karte = {
+  lat: 51.1, lon: 10.4, z: 5,   // Mittelpunkt und Zoomstufe (Kommazahl erlaubt)
+  breite: 0, hoehe: 0,
+  ctx: null, kacheln: new Map(), treffer: [], auswahl: null,
+  zeiger: new Map(), tipp: null, eingepasst: false, geplant: false,
+};
+const welt = z => KACHEL * 2 ** z;
+const weltX = (lon, z) => (lon + 180) / 360 * welt(z);
+const weltY = (lat, z) => { const r = Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * welt(z); };
+const lonAus = (x, z) => x / welt(z) * 360 - 180;
+const latAus = (y, z) => 180 / Math.PI * Math.atan(Math.sinh(Math.PI - 2 * Math.PI * y / welt(z)));
+
+function aufBildschirm(lat, lon) {
+  return {
+    x: weltX(lon, karte.z) - weltX(karte.lon, karte.z) + karte.breite / 2,
+    y: weltY(lat, karte.z) - weltY(karte.lat, karte.z) + karte.hoehe / 2,
+  };
+}
+function vomBildschirm(x, y) {
+  const wx = weltX(karte.lon, karte.z) + x - karte.breite / 2;
+  const wy = weltY(karte.lat, karte.z) + y - karte.hoehe / 2;
+  return { lat: latAus(wy, karte.z), lon: lonAus(wx, karte.z) };
+}
+/** Karte um dx/dy Bildschirmpixel verschieben (Inhalt folgt dem Finger) */
+function verschieben(dx, dy) {
+  const wx = weltX(karte.lon, karte.z) - dx;
+  const wy = Math.max(0, Math.min(welt(karte.z), weltY(karte.lat, karte.z) - dy));
+  karte.lon = ((lonAus(wx, karte.z) + 540) % 360) - 180;
+  karte.lat = latAus(wy, karte.z);
+}
+/** Zoomen, wobei der Punkt unter (x, y) an seiner Stelle bleibt */
+function zoomenUm(x, y, neuesZ) {
+  const p = vomBildschirm(x, y);
+  karte.z = Math.max(2, Math.min(19, neuesZ));
+  const q = aufBildschirm(p.lat, p.lon);
+  verschieben(x - q.x, y - q.y);
+  karteNeuZeichnen();
+}
+
+function farbe(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+const dunkel = () => getComputedStyle(document.documentElement).colorScheme.includes('dark');
+
+function kachelBild(z, x, y) {
+  const key = `${z}/${x}/${y}`;
+  let img = karte.kacheln.get(key);
+  if (!img) {
+    img = new Image();
+    img.onload = karteNeuZeichnen;
+    img.onerror = () => { img.fehler = true; };
+    img.src = `https://tile.openstreetmap.org/${key}.png`;
+    karte.kacheln.set(key, img);
+    if (karte.kacheln.size > 400) karte.kacheln.delete(karte.kacheln.keys().next().value);
+  }
+  return img;
+}
+
+function kachelnZeichnen(ctx) {
+  const tz = Math.max(0, Math.min(19, Math.round(karte.z)));
+  const s = 2 ** (karte.z - tz), n = 2 ** tz;
+  const links = weltX(karte.lon, tz) - karte.breite / 2 / s;
+  const oben = weltY(karte.lat, tz) - karte.hoehe / 2 / s;
+  const x0 = Math.floor(links / KACHEL), x1 = Math.floor((links + karte.breite / s) / KACHEL);
+  const y0 = Math.max(0, Math.floor(oben / KACHEL)), y1 = Math.min(n - 1, Math.floor((oben + karte.hoehe / s) / KACHEL));
+  let geladen = 0;
+  if (dunkel() && 'filter' in ctx) ctx.filter = 'invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)';
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const img = kachelBild(tz, ((x % n) + n) % n, y);
+    if (img.complete && img.naturalWidth) {
+      ctx.drawImage(img, (x * KACHEL - links) * s, (y * KACHEL - oben) * s, KACHEL * s + .5, KACHEL * s + .5);
+      geladen++;
+    }
+  }
+  if ('filter' in ctx) ctx.filter = 'none';
+  return geladen > 0;
+}
+
+/** Gradnetz mit Beschriftung in einer passenden Schrittweite */
+function gitterZeichnen(ctx, beschriften) {
+  const roh = 110 * 360 / welt(karte.z);
+  const schritte = [0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30];
+  const schritt = schritte.find(s => s >= roh) || 30;
+  const stellen = Math.max(0, Math.ceil(-Math.log10(schritt)));
+  const lo = vomBildschirm(0, 0), ru = vomBildschirm(karte.breite, karte.hoehe);
+  ctx.strokeStyle = farbe('--gitter'); ctx.lineWidth = 1;
+  ctx.fillStyle = farbe('--blass'); ctx.font = `11px ${farbe('--f-daten')}`;
+  for (let lon = Math.floor(lo.lon / schritt) * schritt; lon <= ru.lon; lon += schritt) {
+    const x = Math.round(aufBildschirm(karte.lat, lon).x) + .5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, karte.hoehe); ctx.stroke();
+    if (beschriften) ctx.fillText(`${lon.toFixed(stellen)}°`, x + 3, karte.hoehe - 30);
+  }
+  for (let lat = Math.floor(ru.lat / schritt) * schritt; lat <= lo.lat; lat += schritt) {
+    const y = Math.round(aufBildschirm(lat, karte.lon).y) + .5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(karte.breite, y); ctx.stroke();
+    if (beschriften) ctx.fillText(`${lat.toFixed(stellen)}°`, 4, y - 3);
+  }
+}
+
+function massstabZeichnen(ctx) {
+  const mProPx = 156543.03392 * Math.cos(karte.lat * Math.PI / 180) / 2 ** karte.z;
+  const ziel = mProPx * 100;
+  const p = 10 ** Math.floor(Math.log10(ziel));
+  const meter = [1, 2, 5, 10].map(f => f * p).filter(v => v <= ziel).pop() || p;
+  const px = meter / mProPx;
+  const x = 12, y = karte.hoehe - 12;
+  ctx.strokeStyle = farbe('--tinte'); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 6); ctx.stroke();
+  ctx.fillStyle = farbe('--tinte'); ctx.font = `500 11px ${farbe('--f-daten')}`;
+  ctx.fillText(meter >= 1000 ? `${meter / 1000} km` : `${meter} m`, x + 4, y - 6);
+}
+
+function punkteZeichnen(ctx) {
+  karte.treffer = [];
+  const rand = farbe('--blatt'), punkt = farbe('--bernstein'), wahl = farbe('--moos');
+  const liste = gefilterteEintraege().filter(e => hatOrt(e.ort));
+  for (const e of liste) {
+    const p = aufBildschirm(e.ort.lat, e.ort.lon);
+    if (p.x < -20 || p.y < -20 || p.x > karte.breite + 20 || p.y > karte.hoehe + 20) continue;
+    karte.treffer.push({ id: e.id, x: p.x, y: p.y });
+    // Genauigkeitskreis, wenn er auf dem Bildschirm sichtbar groß ist
+    const mProPx = 156543.03392 * Math.cos(e.ort.lat * Math.PI / 180) / 2 ** karte.z;
+    const r = (e.ort.genauigkeit_m || 0) / mProPx;
+    if (r > 9) {
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.globalAlpha = .15; ctx.fillStyle = punkt; ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+  for (const t of karte.treffer) {
+    const gewaehlt = t.id === karte.auswahl;
+    ctx.beginPath(); ctx.arc(t.x, t.y, gewaehlt ? 9 : 7, 0, Math.PI * 2);
+    ctx.fillStyle = gewaehlt ? wahl : punkt; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = rand; ctx.stroke();
+  }
+  const ohneOrt = gefilterteEintraege().length - liste.length;
+  $('#karte-hinweis').textContent = liste.length === 0
+    ? (sichtbare().length ? 'Kein Eintrag mit Ort passt zum Filter.' : 'Hier erscheinen deine Beobachtungsorte.')
+    : (ohneOrt ? `${ohneOrt} Eintrag${ohneOrt > 1 ? 'e' : ''} ohne Ort nicht dargestellt.` : '');
+}
+
+function karteNeuZeichnen() {
+  if (karte.geplant) return;
+  karte.geplant = true;
+  requestAnimationFrame(() => {
+    karte.geplant = false;
+    if (!karte.ctx || zustand.ansicht !== 'karte' || !karte.breite) return;
+    const ctx = karte.ctx, dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = farbe('--kartengrund');
+    ctx.fillRect(0, 0, karte.breite, karte.hoehe);
+    let mitBild = false;
+    if (zustand.einstellungen.kartenbild && !inClaude()) mitBild = kachelnZeichnen(ctx);
+    $('#karte-quelle').hidden = !mitBild;
+    gitterZeichnen(ctx, !mitBild);
+    punkteZeichnen(ctx);
+    massstabZeichnen(ctx);
+  });
+}
+
+function karteGroesseAnpassen() {
+  const c = $('#karte'), dpr = window.devicePixelRatio || 1;
+  karte.breite = c.clientWidth; karte.hoehe = c.clientHeight;
+  c.width = Math.round(karte.breite * dpr); c.height = Math.round(karte.hoehe * dpr);
+  karteNeuZeichnen();
+}
+
+/** Ausschnitt so wählen, dass alle (gefilterten) Punkte sichtbar sind */
+function karteEinpassen() {
+  const pts = gefilterteEintraege().filter(e => hatOrt(e.ort)).map(e => e.ort);
+  if (!pts.length || !karte.breite) { karteNeuZeichnen(); return; }
+  const minLat = Math.min(...pts.map(p => p.lat)), maxLat = Math.max(...pts.map(p => p.lat));
+  const minLon = Math.min(...pts.map(p => p.lon)), maxLon = Math.max(...pts.map(p => p.lon));
+  let z = 17;
+  for (; z > 2; z--) {
+    const b = weltX(maxLon, z) - weltX(minLon, z), hh = weltY(minLat, z) - weltY(maxLat, z);
+    if (b <= karte.breite - 80 && hh <= karte.hoehe - 80) break;
+  }
+  karte.z = z;
+  karte.lon = (minLon + maxLon) / 2;
+  karte.lat = latAus((weltY(minLat, z) + weltY(maxLat, z)) / 2, z);
+  karteNeuZeichnen();
+}
+
+function karteAnzeigen() {
+  if (!karte.ctx) karteEinrichten();
+  karteGroesseAnpassen();
+  if (!karte.eingepasst) { karte.eingepasst = true; karteEinpassen(); }
+  karteAuswahlZeichnen();
+}
+
+function karteAuswahlZeichnen() {
+  const box = $('#karte-auswahl');
+  const e = karte.auswahl && zustand.eintraege.get(karte.auswahl);
+  box.replaceChildren(...(e && !e.geloescht ? [eintragKarte(e)] : [h('p', { class: 'blass', text: 'Tippe auf einen Punkt, um die Beobachtung zu sehen.' })]));
+}
+
+function karteEinrichten() {
+  const c = $('#karte');
+  karte.ctx = c.getContext('2d');
+  const pos = ev => { const r = c.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+
+  c.addEventListener('pointerdown', ev => {
+    c.setPointerCapture(ev.pointerId);
+    const p = pos(ev);
+    karte.zeiger.set(ev.pointerId, p);
+    karte.tipp = karte.zeiger.size === 1 ? { ...p, bewegt: false } : null;
+  });
+  c.addEventListener('pointermove', ev => {
+    if (!karte.zeiger.has(ev.pointerId)) return;
+    const alt = karte.zeiger.get(ev.pointerId), neu = pos(ev);
+    if (karte.zeiger.size === 1) {
+      verschieben(neu.x - alt.x, neu.y - alt.y);
+      if (karte.tipp && Math.hypot(neu.x - karte.tipp.x, neu.y - karte.tipp.y) > 6) karte.tipp.bewegt = true;
+    } else if (karte.zeiger.size === 2) {
+      // Zwei Finger: Abstand ändert den Zoom, Mittelpunkt verschiebt
+      const anderer = [...karte.zeiger.entries()].find(([id]) => id !== ev.pointerId)[1];
+      const d0 = Math.hypot(alt.x - anderer.x, alt.y - anderer.y), d1 = Math.hypot(neu.x - anderer.x, neu.y - anderer.y);
+      const m0 = { x: (alt.x + anderer.x) / 2, y: (alt.y + anderer.y) / 2 }, m1 = { x: (neu.x + anderer.x) / 2, y: (neu.y + anderer.y) / 2 };
+      verschieben(m1.x - m0.x, m1.y - m0.y);
+      if (d0 > 0 && d1 > 0) zoomenUm(m1.x, m1.y, karte.z + Math.log2(d1 / d0));
+    }
+    karte.zeiger.set(ev.pointerId, neu);
+    karteNeuZeichnen();
+  });
+  const ende = ev => {
+    if (!karte.zeiger.has(ev.pointerId)) return;
+    const p = pos(ev);
+    karte.zeiger.delete(ev.pointerId);
+    if (ev.type === 'pointerup' && karte.tipp && !karte.tipp.bewegt) {
+      // Tippen: nächsten Punkt im Umkreis von 24 px wählen
+      let beste = null, d = 24;
+      for (const t of karte.treffer) { const dd = Math.hypot(t.x - p.x, t.y - p.y); if (dd < d) { d = dd; beste = t; } }
+      karte.auswahl = beste ? beste.id : null;
+      karteAuswahlZeichnen(); karteNeuZeichnen();
+    }
+    karte.tipp = null;
+  };
+  c.addEventListener('pointerup', ende);
+  c.addEventListener('pointercancel', ende);
+  c.addEventListener('wheel', ev => { ev.preventDefault(); const p = pos(ev); zoomenUm(p.x, p.y, karte.z - ev.deltaY * 0.0025); }, { passive: false });
+  c.addEventListener('dblclick', ev => { const p = pos(ev); zoomenUm(p.x, p.y, karte.z + 1); });
+
+  $('#karte-plus').addEventListener('click', () => zoomenUm(karte.breite / 2, karte.hoehe / 2, Math.round(karte.z) + 1));
+  $('#karte-minus').addEventListener('click', () => zoomenUm(karte.breite / 2, karte.hoehe / 2, Math.round(karte.z) - 1));
+  $('#karte-alle').addEventListener('click', karteEinpassen);
+
+  // Ort auf der Karte wählen: Stern in der Mitte, Karte darunter verschieben
+  const wahlModus = an => { $('#stern').hidden = !an; $('#karte-wahl').hidden = !an; $('#karte-hinweis').hidden = an; };
+  $('#karte-punkt').addEventListener('click', () => wahlModus($('#karte-wahl').hidden));
+  $('#karte-wahl-abbrechen').addEventListener('click', () => wahlModus(false));
+  $('#karte-wahl-ok').addEventListener('click', () => {
+    const p = vomBildschirm(karte.breite / 2, karte.hoehe / 2);
+    // Genauigkeit ehrlich aus dem Zoom ableiten: etwa 10 Bildschirmpixel
+    const mProPx = 156543.03392 * Math.cos(p.lat * Math.PI / 180) / 2 ** karte.z;
+    wahlModus(false);
+    editorOeffnen(null, { lat: p.lat, lon: ((p.lon + 540) % 360) - 180, genauigkeit_m: Math.max(3, Math.round(mProPx * 10)) });
+  });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (zustand.ansicht === 'karte') karteGroesseAnpassen(); }).observe($('#karte-rahmen'));
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', karteNeuZeichnen);
+}
+
+/* ---------------------------------------------------------------------------
+   7. ZIP schreiben und lesen
+   Schreiben: unkomprimiert ("stored"), UTF-8-Dateinamen, ohne ZIP64
+   (also bis 4 GB). Lesen: "stored" und "deflate" (über DecompressionStream),
+   damit auch am Rechner neu gepackte Archive funktionieren.
+   --------------------------------------------------------------------------- */
+const CRC_TABELLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABELLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function dosZeit(d) {
+  return {
+    zeit: (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2),
+    datum: ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(),
+  };
+}
+
+/** dateien: [{name, daten: string | Blob | Uint8Array}] -> Blob (application/zip) */
+async function zipErstellen(dateien) {
+  const enc = new TextEncoder();
+  const teile = [], verzeichnis = [];
+  let versatz = 0;
+  const { zeit, datum } = dosZeit(new Date());
+  for (const d of dateien) {
+    const name = enc.encode(d.name);
+    const bytes = typeof d.daten === 'string' ? enc.encode(d.daten)
+      : d.daten instanceof Uint8Array ? d.daten : new Uint8Array(await d.daten.arrayBuffer());
+    const crc = crc32(bytes);
+    const kopf = new DataView(new ArrayBuffer(30));
+    kopf.setUint32(0, 0x04034b50, true); kopf.setUint16(4, 20, true); kopf.setUint16(6, 0x0800, true);
+    kopf.setUint16(8, 0, true); kopf.setUint16(10, zeit, true); kopf.setUint16(12, datum, true);
+    kopf.setUint32(14, crc, true); kopf.setUint32(18, bytes.length, true); kopf.setUint32(22, bytes.length, true);
+    kopf.setUint16(26, name.length, true); kopf.setUint16(28, 0, true);
+    teile.push(kopf.buffer, name, bytes);
+    const z = new DataView(new ArrayBuffer(46));
+    z.setUint32(0, 0x02014b50, true); z.setUint16(4, 20, true); z.setUint16(6, 20, true); z.setUint16(8, 0x0800, true);
+    z.setUint16(10, 0, true); z.setUint16(12, zeit, true); z.setUint16(14, datum, true);
+    z.setUint32(16, crc, true); z.setUint32(20, bytes.length, true); z.setUint32(24, bytes.length, true);
+    z.setUint16(28, name.length, true); z.setUint32(42, versatz, true);
+    verzeichnis.push(z.buffer, name);
+    versatz += 30 + name.length + bytes.length;
+  }
+  const vzGroesse = verzeichnis.reduce((s, b) => s + b.byteLength, 0);
+  const ende = new DataView(new ArrayBuffer(22));
+  ende.setUint32(0, 0x06054b50, true);
+  ende.setUint16(8, dateien.length, true); ende.setUint16(10, dateien.length, true);
+  ende.setUint32(12, vzGroesse, true); ende.setUint32(16, versatz, true);
+  return new Blob([...teile, ...verzeichnis, ende.buffer], { type: 'application/zip' });
+}
+
+/** Liest eine ZIP-Datei. Liefert Map: Pfad -> { bytes(): Promise<Uint8Array>, text(): Promise<string> } */
+async function zipLesen(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  const dv = new DataView(buf.buffer);
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('Das ist keine gültige ZIP-Datei.');
+  const anzahl = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const utf8 = new TextDecoder();
+  const dateien = new Map();
+  for (let i = 0; i < anzahl; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error('ZIP-Verzeichnis beschädigt.');
+    // Zentrales Verzeichnis: +10 Methode, +20 komprimierte Größe, +24 Originalgröße,
+    // +28/+30/+32 Längen von Name/Extra/Kommentar, +42 Versatz des lokalen Kopfs, +46 Name
+    const methode = dv.getUint16(p + 10, true);
+    const kompGroesse = dv.getUint32(p + 20, true), groesse = dv.getUint32(p + 24, true);
+    const nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), kl = dv.getUint16(p + 32, true);
+    const lokal = dv.getUint32(p + 42, true);
+    const name = utf8.decode(buf.subarray(p + 46, p + 46 + nl));
+    // Lokaler Kopf: 30 Bytes + eigene Längen von Name (+26) und Extra (+28), dann die Daten
+    const start = lokal + 30 + dv.getUint16(lokal + 26, true) + dv.getUint16(lokal + 28, true);
+    p += 46 + nl + el + kl;
+    if (name.endsWith('/')) continue;
+    const roh = buf.subarray(start, start + kompGroesse);
+    dateien.set(name, {
+      async bytes() {
+        if (methode === 0) return roh;
+        if (methode === 8 && window.DecompressionStream) {
+          const strom = new Blob([roh]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+          return new Uint8Array(await new Response(strom).arrayBuffer());
+        }
+        throw new Error(`Komprimierung ${methode} wird nicht unterstützt (${name}).`);
+      },
+      async text() { return utf8.decode(await this.bytes()); },
+      groesse,
+    });
+  }
+  return dateien;
+}
+
+/* ---------------------------------------------------------------------------
+   8. Archiv: Export, Import, Zusammenführen
+   --------------------------------------------------------------------------- */
+const formatText = () => $('#archivformat').textContent.trim() + '\n';
+
+/** Archivpfad einer Mediendatei */
+const medienPfad = (eintragId, m) => `medien/${eintragId}/${m.id}.${endungFuer(m.mime)}`;
+
+/** Lesbare Fassung aller Einträge (eintraege.md) */
+function eintraegeAlsMarkdown(eintraege, kopf) {
+  const z = [`# Logbuch`, '', kopf, '',
+    'Jeder Eintrag trennt **Beobachtung** (wahrgenommen) und **Deutung** (interpretiert). Maßgeblich ist `logbuch.json`.', ''];
+  for (const e of [...eintraege].sort((a, b) => zeitWert(a.zeitpunkt) - zeitWert(b.zeitpunkt))) {
+    const titel = [e.zeitpunkt ? e.zeitpunkt.slice(0, 16).replace('T', ' ') + ' (' + e.zeitpunkt.slice(19) + ')' : 'ohne Zeit', e.ort?.name].filter(Boolean).join(' · ');
+    z.push(`## ${titel}`, '', `id: \`${e.id}\``, '');
+    if (hatOrt(e.ort)) z.push(`- **Ort:** ${e.ort.lat}, ${e.ort.lon}` + (e.ort.genauigkeit_m != null ? ` (±${e.ort.genauigkeit_m} m` : ' (') + `, ${{ hand: 'von Hand', karte: 'auf der Karte gewählt' }[e.ort.quelle] || 'GPS'})` + (e.ort.hoehe_m != null ? `, Höhe ${e.ort.hoehe_m} m` : ''));
+    if (e.wetter) z.push(`- **Wetter:** ${[e.wetter.text, e.wetter.temperatur_c != null ? e.wetter.temperatur_c + ' °C' : ''].filter(Boolean).join(', ')} (${e.wetter.quelle === 'open-meteo' ? 'Wetterdienst, Modellwert' : 'selbst wahrgenommen'})`);
+    if ((e.tags || []).length) z.push(`- **Tags:** ${e.tags.join(', ')}`);
+    if (e.autor) z.push(`- **Von:** ${e.autor}`);
+    z.push('', `**Beobachtung:** ${e.beobachtung || '–'}`, '');
+    if (e.deutung) z.push(`**Deutung:** ${e.deutung}`, '');
+    if ((e.medien || []).length) z.push('**Medien:** ' + e.medien.map(m => `[${m.typ}](${medienPfad(e.id, m)})`).join(', '), '');
+  }
+  return z.join('\n');
+}
+
+async function archivErstellen() {
+  const eintraege = [...zustand.eintraege.values()];
+  const dateien = [];
+  const ausgabe = [];
+  let fehlend = 0;
+  for (const e of eintraege) {
+    if (e.geloescht) { ausgabe.push({ id: e.id, erstellt: e.erstellt, geaendert: e.geaendert, geloescht: true }); continue; }
+    const medien = [];
+    for (const m of e.medien || []) {
+      const gespeichert = await db.holen('medien', m.id).catch(() => null);
+      if (!gespeichert?.blob) { fehlend++; continue; }
+      const pfad = medienPfad(e.id, gespeichert);
+      dateien.push({ name: pfad, daten: gespeichert.blob });
+      medien.push({ id: m.id, typ: gespeichert.typ, mime: gespeichert.mime, bytes: gespeichert.blob.size, datei: pfad });
+    }
+    ausgabe.push({ ...e, medien });
+  }
+  ausgabe.sort((a, b) => zeitWert(a.zeitpunkt || a.erstellt) - zeitWert(b.zeitpunkt || b.erstellt));
+  const jetzt = isoLokal();
+  const name = zustand.einstellungen.autor || '';
+  const json = {
+    format: 'logbuch-archiv', version: 1, exportiert: jetzt, exportiert_von: name,
+    anzahl_eintraege: ausgabe.filter(e => !e.geloescht).length,
+    eintraege: ausgabe,
+  };
+  const kopf = `Exportiert ${jetzt}${name ? ' von ' + name : ''}. ${json.anzahl_eintraege} Einträge.`;
+  dateien.unshift(
+    { name: 'LIESMICH.md', daten: formatText() },
+    { name: 'logbuch.json', daten: JSON.stringify(json, null, 2) },
+    { name: 'eintraege.md', daten: eintraegeAlsMarkdown(ausgabe.filter(e => !e.geloescht), kopf) },
+  );
+  const blob = await zipErstellen(dateien);
+  const slug = name.toLowerCase().normalize('NFKD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '');
+  const d = new Date();
+  const dateiname = `logbuch${slug ? '-' + slug : ''}-${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}-${zwei(d.getHours())}${zwei(d.getMinutes())}.zip`;
+  return { blob, dateiname, fehlend, anzahl: json.anzahl_eintraege };
+}
+
+/** Datei an den Nutzer geben: in claude.ai über die downloads-Fähigkeit, sonst über einen Download-Link */
+async function dateiAnbieten(blob, dateiname) {
+  if (inClaude()) {
+    const dl = await window.claude.use('downloads').catch(() => null);
+    if (!dl) throw new Error('Speichern ist in dieser Ansicht nicht möglich.');
+    await dl.save({ filename: dateiname, data: blob });
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: dateiname, hidden: true });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+async function exportieren() {
+  const knopf = $('#export');
+  const beschriftung = knopf.textContent;
+  knopf.disabled = true; knopf.textContent = 'Archiv wird gepackt …';
+  try {
+    const { blob, dateiname, fehlend, anzahl } = await archivErstellen();
+    // Hinweis: Direktes Teilen (Web Share) ist absichtlich nicht eingebaut. Chrome auf Android
+    // lehnt ZIP-Dateien dort ab ("Permission denied"). Geteilt wird aus dem Download-Ordner.
+    await dateiAnbieten(blob, dateiname);
+    await einstellungSetzen('letzterExport', isoLokal());
+    $('#export-info').textContent = `${dateiname} · ${anzahl} Einträge · ${groesseText(blob.size)}` + (fehlend ? ` · ${fehlend} Mediendateien fehlten` : '');
+    hinweiseZeichnen();
+  } catch (err) {
+    if (err?.name === 'AbortError' || err?.code === 'declined') return;
+    meldung('Archiv konnte nicht gespeichert werden: ' + (err?.message || err), 7000);
+  } finally {
+    knopf.disabled = false; knopf.textContent = beschriftung;
+  }
+}
+
+/**
+ * Archiv laden und mit dem Bestand zusammenführen.
+ * Regeln (siehe Formatbeschreibung): gleiche id -> neueres "geaendert" gewinnt;
+ * Medien über id; neuerer Grabstein löscht.
+ */
+async function importieren(datei) {
+  const bericht = { neu: 0, aktualisiert: 0, unveraendert: 0, geloescht: 0, medien: 0, fehlendeMedien: 0 };
+  let json, zip = null, praefix = '';
+  if (/\.json$/i.test(datei.name) || datei.type === 'application/json') {
+    json = JSON.parse(await datei.text());
+  } else {
+    zip = await zipLesen(datei);
+    // logbuch.json kann auch in einem Unterordner liegen (wenn am Rechner neu gepackt)
+    const pfad = [...zip.keys()].filter(n => n === 'logbuch.json' || n.endsWith('/logbuch.json')).sort((a, b) => a.length - b.length)[0];
+    if (!pfad) throw new Error('In der ZIP-Datei fehlt logbuch.json.');
+    praefix = pfad.slice(0, -'logbuch.json'.length);
+    json = JSON.parse(await zip.get(pfad).text());
+  }
+  if (json?.format !== 'logbuch-archiv' || !Array.isArray(json.eintraege)) throw new Error('Das ist kein Logbuch-Archiv.');
+  if (json.version > 1) meldung('Das Archiv stammt aus einer neueren Version. Unbekannte Felder werden übernommen.', 6000);
+
+  for (const neu of json.eintraege) {
+    if (!neu?.id) continue;
+    const alt = zustand.eintraege.get(neu.id);
+    if (alt && zeitWert(neu.geaendert) <= zeitWert(alt.geaendert)) { bericht.unveraendert++; continue; }
+    if (neu.geloescht) {
+      if (alt && !alt.geloescht) bericht.geloescht++; else bericht.unveraendert++;
+      await grabsteinSetzen(alt || neu, neu.geaendert);
+      continue;
+    }
+    // Medien übernehmen, die noch fehlen
+    const medienListe = [];
+    for (const m of neu.medien || []) {
+      const vorhanden = await db.holen('medien', m.id).catch(() => null);
+      if (vorhanden) { medienListe.push({ id: m.id, typ: m.typ, mime: m.mime, bytes: m.bytes }); continue; }
+      const eintragZip = zip && m.datei ? zip.get(praefix + m.datei) : null;
+      if (!eintragZip) { bericht.fehlendeMedien++; continue; }
+      const mime = basisMime(m.mime) || ENDUNG_MIME[m.datei.split('.').pop().toLowerCase()] || 'application/octet-stream';
+      const blob = new Blob([await eintragZip.bytes()], { type: mime });
+      let vorschau = null;
+      if (m.typ === 'foto') { try { vorschau = await bildSkalieren(blob, 360, 0.72); } catch (_) { /* ohne */ } }
+      await db.setzen('medien', { id: m.id, eintragId: neu.id, typ: m.typ, mime, name: '', blob, vorschau });
+      medienListe.push({ id: m.id, typ: m.typ, mime, bytes: blob.size });
+      bericht.medien++;
+    }
+    // Medien, die in der neueren Fassung entfernt wurden, auch hier entfernen
+    if (alt && !alt.geloescht) {
+      const behalten = new Set(medienListe.map(m => m.id));
+      for (const m of alt.medien || []) if (!behalten.has(m.id)) { await db.loeschen('medien', m.id); urlsFreigeben(m.id); }
+    }
+    const eintrag = { ...neu, medien: medienListe };
+    await db.setzen('eintraege', eintrag);
+    zustand.eintraege.set(eintrag.id, eintrag);
+    alt && !alt.geloescht ? bericht.aktualisiert++ : bericht.neu++;
+  }
+  return { bericht, quelle: json.exportiert_von || '', exportiert: json.exportiert || '' };
+}
+
+function berichtZeichnen({ bericht: b, quelle, exportiert }, dateiname) {
+  const zeilen = [
+    `${dateiname}${quelle ? ' von ' + quelle : ''}${exportiert ? ', exportiert ' + datumText(exportiert) : ''}`,
+    `${b.neu} neu · ${b.aktualisiert} aktualisiert · ${b.unveraendert} schon vorhanden` + (b.geloescht ? ` · ${b.geloescht} gelöscht` : ''),
+    `${b.medien} Mediendateien übernommen` + (b.fehlendeMedien ? ` · ${b.fehlendeMedien} fehlten im Archiv` : ''),
+  ];
+  $('#import-bericht').replaceChildren(h('div', { class: 'bericht' }, ...zeilen.map((t, i) => h('p', { class: i ? 'daten' : '', text: t }))));
+}
+
+/* ---- Auszug: ausgewählte Einträge ohne Ort, Namen, Wetter ----
+   Für das Weitergeben an andere Menschen oder Programme. Fotos werden immer
+   neu kodiert (entfernt EXIF, also auch GPS aus Kamera-Fotos), Ton wird nach
+   WAV umgewandelt (entfernt Metadaten fremder Aufnahme-Apps). Die ids bleiben,
+   damit ein Auszug beim Zusammenführen nichts verdoppelt. */
+const auszugWahl = new Set();
+
+function auszugListeZeichnen() {
+  const box = $('#auszug-liste');
+  const eintraege = sichtbare().sort((a, b) => zeitWert(b.zeitpunkt) - zeitWert(a.zeitpunkt));
+  for (const id of [...auszugWahl]) if (!eintraege.some(e => e.id === id)) auszugWahl.delete(id);
+  box.replaceChildren(...(eintraege.length ? eintraege.map(e => h('label', { class: 'auszug-zeile' },
+    h('input', { type: 'checkbox', checked: auszugWahl.has(e.id), onchange: ev => {
+      ev.target.checked ? auszugWahl.add(e.id) : auszugWahl.delete(e.id);
+      auszugZaehlen();
+    } }),
+    h('span', {},
+      h('span', { class: 'daten blass', text: datumText(e.zeitpunkt) + ' ' }),
+      (e.beobachtung || '(ohne Text)').slice(0, 90) + ((e.beobachtung || '').length > 90 ? ' …' : ''))))
+    : [h('p', { class: 'blass', text: 'Noch keine Einträge.' })]));
+  auszugZaehlen();
+}
+function auszugZaehlen() {
+  const n = auszugWahl.size, k = $('#auszug-export');
+  k.disabled = n === 0;
+  k.textContent = n ? `Auszug speichern (${n} Eintr${n === 1 ? 'ag' : 'äge'})` : 'Auszug speichern';
+}
+
+/** Beliebige Tondatei -> WAV, mono, 32 kHz, 16 bit. Entfernt alle Metadaten. */
+async function tonAlsWav(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  let audio;
+  try { audio = await ctx.decodeAudioData(await blob.arrayBuffer()); } finally { if (ctx.close) ctx.close(); }
+  const rate = 32000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(audio.duration * rate)), rate);
+  const quelle = off.createBufferSource();
+  quelle.buffer = audio; quelle.connect(off.destination); quelle.start();
+  const d = (await off.startRendering()).getChannelData(0);
+  const v = new DataView(new ArrayBuffer(44 + d.length * 2));
+  const text = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  text(0, 'RIFF'); v.setUint32(4, 36 + d.length * 2, true); text(8, 'WAVE');
+  text(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  text(36, 'data'); v.setUint32(40, d.length * 2, true);
+  for (let i = 0; i < d.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, d[i])) * 0x7fff, true);
+  return new Blob([v.buffer], { type: 'audio/wav' });
+}
+
+async function auszugErstellen(o) {
+  const dateien = [], ausgabe = [];
+  let ausgelassen = 0;
+  for (const id of auszugWahl) {
+    const e = zustand.eintraege.get(id);
+    if (!e || e.geloescht) continue;
+    const k = JSON.parse(JSON.stringify(e)); // Kopie; das Original bleibt unberührt
+    if (o.ohneOrt) { k.ort = null; delete k.zeitzone; }
+    if (o.ohneAutor) { delete k.autor; delete k.bearbeitet_von; }
+    if (o.ohneWetter) k.wetter = null;
+    const medien = [];
+    for (const m of e.medien || []) {
+      if ((m.typ === 'foto' && !o.fotos) || (m.typ === 'ton' && !o.ton)) continue;
+      const g = await db.holen('medien', m.id).catch(() => null);
+      if (!g?.blob) { ausgelassen++; continue; }
+      let blob, mime;
+      try {
+        if (m.typ === 'foto') { blob = await bildSkalieren(g.blob, 2048, 0.85); mime = 'image/jpeg'; }
+        else { blob = await tonAlsWav(g.blob); mime = 'audio/wav'; }
+      } catch (_) { ausgelassen++; continue; } // lieber weglassen als ungeprüft mitgeben
+      const neu = { id: m.id, typ: m.typ, mime, bytes: blob.size };
+      neu.datei = medienPfad(e.id, neu);
+      dateien.push({ name: neu.datei, daten: blob });
+      medien.push(neu);
+    }
+    k.medien = medien;
+    ausgabe.push(k);
+  }
+  ausgabe.sort((a, b) => zeitWert(a.zeitpunkt) - zeitWert(b.zeitpunkt));
+  const weggelassen = [o.ohneOrt && 'ort', o.ohneAutor && 'autor', o.ohneWetter && 'wetter', !o.fotos && 'fotos', !o.ton && 'ton'].filter(Boolean);
+  const jetzt = isoLokal();
+  const json = { format: 'logbuch-archiv', version: 1, exportiert: jetzt };
+  if (!o.ohneAutor && zustand.einstellungen.autor) json.exportiert_von = zustand.einstellungen.autor;
+  json.auszug = { weggelassen, hinweis: 'Ausgewählte Einträge. Die genannten Angaben wurden beim Export absichtlich entfernt; sie sind nicht unbekannt.' };
+  json.anzahl_eintraege = ausgabe.length;
+  json.eintraege = ausgabe;
+  const namen = { ort: 'Ort', autor: 'Namen', wetter: 'Wetter', fotos: 'Fotos', ton: 'Ton' };
+  const kopf = `Auszug, exportiert ${jetzt}. ${ausgabe.length} Einträge.` + (weggelassen.length ? ` Absichtlich weggelassen: ${weggelassen.map(w => namen[w]).join(', ')}.` : '');
+  dateien.unshift(
+    { name: 'LIESMICH.md', daten: formatText() },
+    { name: 'logbuch.json', daten: JSON.stringify(json, null, 2) },
+    { name: 'eintraege.md', daten: eintraegeAlsMarkdown(ausgabe, kopf) },
+  );
+  const d = new Date();
+  const dateiname = `logbuch-auszug-${d.getFullYear()}-${zwei(d.getMonth() + 1)}-${zwei(d.getDate())}-${zwei(d.getHours())}${zwei(d.getMinutes())}.zip`;
+  return { blob: await zipErstellen(dateien), dateiname, anzahl: ausgabe.length, ausgelassen };
+}
+
+async function auszugExportieren() {
+  const knopf = $('#auszug-export');
+  const beschriftung = knopf.textContent;
+  knopf.disabled = true; knopf.textContent = 'Auszug wird gepackt …';
+  try {
+    const { blob, dateiname, anzahl, ausgelassen } = await auszugErstellen({
+      ohneOrt: $('#a-ort').checked, ohneAutor: $('#a-autor').checked, ohneWetter: $('#a-wetter').checked,
+      fotos: $('#a-fotos').checked, ton: $('#a-ton').checked,
+    });
+    await dateiAnbieten(blob, dateiname);
+    $('#auszug-info').textContent = `${dateiname} · ${anzahl} Einträge · ${groesseText(blob.size)}` + (ausgelassen ? ` · ${ausgelassen} Mediendateien ließen sich nicht bereinigen und wurden weggelassen` : '');
+  } catch (err) {
+    if (err?.code !== 'declined') meldung('Auszug konnte nicht gespeichert werden: ' + (err?.message || err), 7000);
+  } finally {
+    knopf.textContent = beschriftung; auszugZaehlen();
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   9. Gerät: Speicherplatz und Einstellungen
+   --------------------------------------------------------------------------- */
+async function speicherInfoZeichnen() {
+  const box = $('#speicher-info');
+  const teile = [];
+  let belegt = null, frei = null, dauerhaft = null;
+  try { const s = await navigator.storage?.estimate?.(); if (s) { belegt = s.usage; frei = s.quota; } } catch (_) { /* unbekannt */ }
+  try { dauerhaft = await navigator.storage?.persisted?.(); } catch (_) { /* unbekannt */ }
+  if (belegt != null && frei) {
+    teile.push(h('p', { class: 'daten', text: `Belegt ${groesseText(belegt)} von etwa ${groesseText(frei)}, die der Browser erlaubt` }));
+    teile.push(h('div', { class: 'balken' }, h('span', { style: `width:${Math.min(100, Math.max(1, belegt / frei * 100)).toFixed(1)}%` })));
+  } else {
+    teile.push(h('p', { class: 'blass', text: 'Wie viel Speicher frei ist, meldet dieser Browser nicht.' }));
+  }
+  if (dauerhaft === true) {
+    teile.push(h('p', { text: 'Der Speicher ist als dauerhaft markiert. Der Browser löscht ihn nicht von selbst, wenn das Gerät voll wird.' }));
+  } else if (navigator.storage?.persist && db.dauerhaft) {
+    teile.push(h('p', { text: 'Wird das Gerät knapp, darf der Browser diese Daten ohne Nachfrage löschen. Bitte ihn, sie zu behalten:' }));
+    teile.push(h('div', { class: 'knoepfe' }, h('button', { type: 'button', class: 'knopf', text: 'Speicher dauerhaft machen', onclick: async () => {
+      let ok = false;
+      try { ok = await navigator.storage.persist(); } catch (_) { /* nein */ }
+      meldung(ok ? 'Der Speicher bleibt jetzt erhalten.' : 'Der Browser hat abgelehnt. Installiere die App auf dem Startbildschirm und versuch es dann noch einmal.', 6000);
+      speicherInfoZeichnen();
+    } })));
+  }
+  box.replaceChildren(...teile);
+}
+
+function archivAnsichtZeichnen() {
+  $('#e-autor').value = zustand.einstellungen.autor || '';
+  $('#e-fotos').checked = !!zustand.einstellungen.fotoVerkleinern;
+  $('#e-kartenbild').checked = !!zustand.einstellungen.kartenbild;
+  const l = zustand.einstellungen.letzterExport;
+  if (!$('#export-info').textContent) $('#export-info').textContent = l ? `Letzte Sicherung: ${datumText(l)}` : 'Noch keine Sicherung auf diesem Gerät.';
+  speicherInfoZeichnen();
+  auszugListeZeichnen();
+}
+
+/* ---------------------------------------------------------------------------
+   10. Start
+   --------------------------------------------------------------------------- */
+function ereignisseVerbinden() {
+  for (const b of document.querySelectorAll('.reiter button')) b.addEventListener('click', () => ansichtWechseln(b.dataset.ansicht));
+  $('#suche').addEventListener('input', ev => { zustand.filter.text = ev.target.value; listeZeichnen(); if (zustand.ansicht === 'karte') karteNeuZeichnen(); });
+  $('#neu').addEventListener('click', () => editorOeffnen());
+
+  $('#editor-form').addEventListener('submit', ev => { ev.preventDefault(); eintragSpeichern(); });
+  $('#editor-zu').addEventListener('click', editorSchliessen);
+  $('#editor-abbrechen').addEventListener('click', editorSchliessen);
+  $('#eintrag-loeschen').addEventListener('click', eintragLoeschen);
+  $('#ort-messen').addEventListener('click', ortMessen);
+  for (const id of ['#f-lat', '#f-lon', '#f-genau']) $(id).addEventListener('input', () => { if (entwurf) { entwurf.ortQuelle = 'hand'; entwurf.hoehe = null; ortStopp(); $('#ort-status').textContent = 'Ort von Hand eingetragen.'; } });
+  $('#f-tags').addEventListener('input', tagVorschlaegeZeichnen);
+  $('#f-wetter').addEventListener('input', () => { $('#f-wquelle').value = 'selbst'; });
+  $('#wetter-holen').addEventListener('click', wetterAbrufen);
+  $('#ton-aufnahme').addEventListener('click', tonAufnahmeUmschalten);
+  for (const id of ['#f-kamera', '#f-bilder']) $(id).addEventListener('change', ev => { fotosHinzufuegen([...ev.target.files]); ev.target.value = ''; });
+  $('#f-tondatei').addEventListener('change', ev => { const f = ev.target.files[0]; if (f) tonHinzufuegen(f, f.name); ev.target.value = ''; });
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('#editor').hidden) editorSchliessen(); });
+
+  $('#export').addEventListener('click', exportieren);
+  $('#auszug-alle').addEventListener('click', () => { sichtbare().forEach(e => auszugWahl.add(e.id)); auszugListeZeichnen(); });
+  $('#auszug-filter').addEventListener('click', () => { auszugWahl.clear(); gefilterteEintraege().forEach(e => auszugWahl.add(e.id)); auszugListeZeichnen(); });
+  $('#auszug-keine').addEventListener('click', () => { auszugWahl.clear(); auszugListeZeichnen(); });
+  $('#auszug-export').addEventListener('click', auszugExportieren);
+  $('#import').addEventListener('change', async ev => {
+    const datei = ev.target.files[0];
+    ev.target.value = '';
+    if (!datei) return;
+    $('#import-bericht').replaceChildren(h('p', { class: 'blass', text: `${datei.name} wird gelesen …` }));
+    try {
+      const ergebnis = await importieren(datei);
+      berichtZeichnen(ergebnis, datei.name);
+      karte.eingepasst = false;
+      allesZeichnen();
+      speicherInfoZeichnen();
+    } catch (err) {
+      $('#import-bericht').replaceChildren(h('div', { class: 'hinweis warnung' }, h('span', { text: 'Laden fehlgeschlagen: ' + (err?.message || err) })));
+    }
+  });
+  $('#e-autor').addEventListener('change', ev => einstellungSetzen('autor', ev.target.value.trim()));
+  $('#e-fotos').addEventListener('change', ev => einstellungSetzen('fotoVerkleinern', ev.target.checked));
+  $('#e-kartenbild').addEventListener('change', ev => { einstellungSetzen('kartenbild', ev.target.checked); karteNeuZeichnen(); });
+}
+
+async function start() {
+  $('#format-text').textContent = formatText();
+  try { db = idbSpeicher(await idbOeffnen()); } catch (_) { db = speicherImArbeitsspeicher(); }
+  await einstellungenLaden();
+  try { for (const e of await db.alle('eintraege')) zustand.eintraege.set(e.id, e); } catch (_) { /* leer */ }
+  ereignisseVerbinden();
+  let ansicht = 'liste';
+  try { ansicht = localStorage.getItem('logbuch.ansicht') || 'liste'; } catch (_) { /* Standard */ }
+  allesZeichnen();
+  ansichtWechseln(['liste', 'karte', 'archiv'].includes(ansicht) ? ansicht : 'liste');
+  // Offline-Fähigkeit: Service Worker nur in der installierten Fassung (https), nicht in der Vorschau
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !inClaude()) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* ohne Offline-Cache weiter */ });
+  }
+}
+start();
+</script>
+
+</body>
+</html>
