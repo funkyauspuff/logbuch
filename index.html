@@ -340,18 +340,20 @@ legend .optional { font-family: var(--f-text); font-weight: 400; font-size: .8re
           <button type="button" class="knopf" id="auszug-keine">Keine</button>
         </div>
         <div id="auszug-liste" class="auszug-liste"></div>
+        <p class="hilfe">Mit Haken geht es mit, ohne Haken bleibt es hier. Text, Tags und Zeit gehen immer mit.</p>
         <div class="optionen">
-          <label class="zeile-schalter"><input type="checkbox" id="a-ort" checked>
-            <span>Ort weglassen: Koordinaten, Höhe, Ortsname und Zeitzone</span></label>
-          <label class="zeile-schalter"><input type="checkbox" id="a-autor" checked>
-            <span>Namen weglassen</span></label>
-          <label class="zeile-schalter"><input type="checkbox" id="a-wetter" checked>
-            <span>Wetter weglassen. Werte vom Wetterdienst gehören zu einem bestimmten Ort und verraten grob die Gegend.</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-ort">
+            <span>Ort mitgeben: Koordinaten, Höhe, Ortsname und Zeitzone</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-autor">
+            <span>Namen mitgeben</span></label>
+          <label class="zeile-schalter"><input type="checkbox" id="a-wetter">
+            <span>Wetter mitgeben. Werte vom Wetterdienst gehören zu einem bestimmten Ort und verraten grob die Gegend.</span></label>
           <label class="zeile-schalter"><input type="checkbox" id="a-fotos" checked>
             <span>Fotos mitgeben</span></label>
           <label class="zeile-schalter"><input type="checkbox" id="a-ton" checked>
             <span>Tonaufnahmen mitgeben</span></label>
         </div>
+        <p class="bericht" id="auszug-zusammenfassung" aria-live="polite"></p>
         <p class="hilfe">Was in deinen Texten steht, prüft die App nicht: Orte oder Namen in Beobachtung und Deutung bleiben drin. Auch was auf einem Foto zu sehen ist, bleibt zu sehen. Ein Auszug ist zum Weitergeben gedacht, nicht als Sicherung.</p>
         <div class="knoepfe">
           <button type="button" class="knopf knopf-haupt" id="auszug-export" disabled>Auszug speichern</button>
@@ -1865,6 +1867,13 @@ function auszugListeZeichnen() {
     : [h('p', { class: 'blass', text: 'Noch keine Einträge.' })]));
   auszugZaehlen();
 }
+/** Klartext unter den Häkchen: was geht mit, was bleibt hier */
+function auszugZusammenfassen() {
+  const teile = [['a-ort', 'Ort'], ['a-autor', 'Namen'], ['a-wetter', 'Wetter'], ['a-fotos', 'Fotos'], ['a-ton', 'Ton']];
+  const mit = ['Text', 'Tags', 'Zeit', ...teile.filter(([id]) => $('#' + id).checked).map(([, n]) => n)];
+  const hier = teile.filter(([id]) => !$('#' + id).checked).map(([, n]) => n);
+  $('#auszug-zusammenfassung').textContent = `Geht mit: ${mit.join(', ')}.` + (hier.length ? ` Bleibt hier: ${hier.join(', ')}.` : ' Nichts wird weggelassen.');
+}
 function auszugZaehlen() {
   const n = auszugWahl.size, k = $('#auszug-export');
   k.disabled = n === 0;
@@ -1946,7 +1955,7 @@ async function auszugExportieren() {
   knopf.disabled = true; knopf.textContent = 'Auszug wird gepackt …';
   try {
     const { blob, dateiname, anzahl, ausgelassen } = await auszugErstellen({
-      ohneOrt: $('#a-ort').checked, ohneAutor: $('#a-autor').checked, ohneWetter: $('#a-wetter').checked,
+      ohneOrt: !$('#a-ort').checked, ohneAutor: !$('#a-autor').checked, ohneWetter: !$('#a-wetter').checked,
       fotos: $('#a-fotos').checked, ton: $('#a-ton').checked,
     });
     await dateiAnbieten(blob, dateiname);
@@ -1995,6 +2004,7 @@ function archivAnsichtZeichnen() {
   if (!$('#export-info').textContent) $('#export-info').textContent = l ? `Letzte Sicherung: ${datumText(l)}` : 'Noch keine Sicherung auf diesem Gerät.';
   speicherInfoZeichnen();
   auszugListeZeichnen();
+  auszugZusammenfassen();
 }
 
 /* ---------------------------------------------------------------------------
@@ -2024,6 +2034,7 @@ function ereignisseVerbinden() {
   $('#auszug-filter').addEventListener('click', () => { auszugWahl.clear(); gefilterteEintraege().forEach(e => auszugWahl.add(e.id)); auszugListeZeichnen(); });
   $('#auszug-keine').addEventListener('click', () => { auszugWahl.clear(); auszugListeZeichnen(); });
   $('#auszug-export').addEventListener('click', auszugExportieren);
+  for (const id of ['#a-ort', '#a-autor', '#a-wetter', '#a-fotos', '#a-ton']) $(id).addEventListener('change', auszugZusammenfassen);
   $('#import').addEventListener('change', async ev => {
     const datei = ev.target.files[0];
     ev.target.value = '';

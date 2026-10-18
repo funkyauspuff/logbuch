@@ -6,7 +6,7 @@
      Gegend, die du einmal mit Netz angesehen hast, im Wald noch da.
    - Alles andere (z. B. Wetter) geht direkt ins Netz.
    Bei Änderungen an der App VERSION erhöhen, damit Geräte die neue Fassung holen. */
-const VERSION = 'logbuch-v7';
+const VERSION = 'logbuch-v8';
 const APP = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 const FREMD = 'logbuch-fremd';      // Schriften
 const KACHELN = 'logbuch-kacheln';  // Kartenkacheln
